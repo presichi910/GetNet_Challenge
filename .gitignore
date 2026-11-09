@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+
+# Runtime state (rebuilt by the app / ingestion)
+data/chroma/
+data/raw/
+data/tickets.jsonl
+data/handoffs.jsonl
+
+# Evaluation reports: keep only the two that the README cites as evidence
+eval/reports/*
+!eval/reports/latest.md
+!eval/reports/MARKER-DESIGN-*.md
+
+# Personal how-to, not part of the deliverable
+docs/GITHUB_GUIDE.md

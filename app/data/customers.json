@@ -1,0 +1,114 @@
+{
+  "_note": "Synthetic data for demo/testing only. Dates are expressed as day offsets from 'today' and resolved at load time.",
+  "cliente1988": {
+    "profile": {
+      "name": "Carlos Mendes",
+      "business": "Padaria Pão Dourado",
+      "city": "Porto Alegre, RS",
+      "plan": "Get Smart",
+      "account_status": "active",
+      "bank_account": "Itaú ag. 0123 cc ****4567",
+      "pix_enabled": true,
+      "receivables_advance_enabled": true,
+      "member_since": "2022-03-14"
+    },
+    "terminal": {
+      "model": "Get Smart",
+      "serial": "GS-88231-RS",
+      "status": "offline",
+      "connection_type": "wifi",
+      "signal_strength": "weak",
+      "minutes_since_last_seen": 95,
+      "last_error": "NET_TIMEOUT: could not reach the acquirer gateway",
+      "firmware": "4.2.1",
+      "battery_percent": 62
+    },
+    "transactions": [
+      {"id": "TX-90112", "days_ago": 1, "amount": 184.50, "method": "credit", "installments": 3, "status": "approved"},
+      {"id": "TX-90111", "days_ago": 1, "amount": 42.00, "method": "debit", "installments": 1, "status": "approved"},
+      {"id": "TX-90110", "days_ago": 1, "amount": 310.00, "method": "pix", "installments": 1, "status": "approved"},
+      {"id": "TX-90109", "days_ago": 1, "amount": 129.90, "method": "credit", "installments": 1, "status": "declined", "decline_code": "51", "decline_reason": "Insufficient funds / limit on the cardholder's account (issuer decline)"},
+      {"id": "TX-90098", "days_ago": 2, "amount": 76.30, "method": "debit", "installments": 1, "status": "approved"},
+      {"id": "TX-90097", "days_ago": 2, "amount": 220.00, "method": "credit", "installments": 2, "status": "approved"},
+      {"id": "TX-90081", "days_ago": 2, "amount": 58.00, "method": "credit", "installments": 1, "status": "declined", "decline_code": "05", "decline_reason": "Do not honor (issuer declined without specific reason)"},
+      {"id": "TX-90060", "days_ago": 3, "amount": 515.80, "method": "pix", "installments": 1, "status": "approved"}
+    ],
+    "payouts": [
+      {"reference": "Sales of yesterday (debit + Pix)", "sales_day_offset": -1, "gross": 352.00, "fees": 3.10, "net": 348.90, "expected_in_days": 1, "status": "scheduled"},
+      {"reference": "Sales of yesterday (credit, 1st installment)", "sales_day_offset": -1, "gross": 233.25, "fees": 8.40, "net": 224.85, "expected_in_days": 30, "status": "scheduled"},
+      {"reference": "Sales of 2 days ago (debit + Pix)", "sales_day_offset": -2, "gross": 596.30, "fees": 5.20, "net": 591.10, "expected_in_days": 0, "status": "processing"},
+      {"reference": "Sales of 3 days ago", "sales_day_offset": -3, "gross": 515.80, "fees": 0.00, "net": 515.80, "expected_in_days": -1, "status": "paid"}
+    ],
+    "tickets": []
+  },
+  "cliente2024": {
+    "profile": {
+      "name": "Marina Souza",
+      "business": "Boutique Maré",
+      "city": "Florianópolis, SC",
+      "plan": "Get Clássica",
+      "account_status": "active",
+      "bank_account": "Nubank ag. 0001 cc ****9910",
+      "pix_enabled": true,
+      "receivables_advance_enabled": false,
+      "member_since": "2023-08-02"
+    },
+    "terminal": {
+      "model": "Get Clássica",
+      "serial": "GC-55012-SC",
+      "status": "online",
+      "connection_type": "chip 4G",
+      "signal_strength": "strong",
+      "minutes_since_last_seen": 1,
+      "last_error": null,
+      "firmware": "3.9.4",
+      "battery_percent": 88
+    },
+    "transactions": [
+      {"id": "TX-71002", "days_ago": 1, "amount": 399.90, "method": "credit", "installments": 4, "status": "approved"},
+      {"id": "TX-71001", "days_ago": 1, "amount": 89.00, "method": "debit", "installments": 1, "status": "approved"},
+      {"id": "TX-70990", "days_ago": 2, "amount": 150.00, "method": "pix", "installments": 1, "status": "approved"}
+    ],
+    "payouts": [
+      {"reference": "Sales of yesterday (debit)", "sales_day_offset": -1, "gross": 89.00, "fees": 0.85, "net": 88.15, "expected_in_days": 1, "status": "scheduled"},
+      {"reference": "Sales of yesterday (credit, 1st installment)", "sales_day_offset": -1, "gross": 99.98, "fees": 4.10, "net": 95.88, "expected_in_days": 30, "status": "scheduled"},
+      {"reference": "Sales of 2 days ago (Pix)", "sales_day_offset": -2, "gross": 150.00, "fees": 0.00, "net": 150.00, "expected_in_days": -1, "status": "paid"}
+    ],
+    "tickets": []
+  },
+  "cliente3030": {
+    "profile": {
+      "name": "João Pereira",
+      "business": "Oficina do João",
+      "city": "Curitiba, PR",
+      "plan": "Get Smart",
+      "account_status": "active",
+      "bank_account": "Bradesco ag. 2210 cc ****0032",
+      "pix_enabled": false,
+      "receivables_advance_enabled": true,
+      "member_since": "2021-11-20"
+    },
+    "terminal": {
+      "model": "Get Smart",
+      "serial": "GS-10442-PR",
+      "status": "online",
+      "connection_type": "ethernet",
+      "signal_strength": "n/a",
+      "minutes_since_last_seen": 0,
+      "last_error": "PRINTER_PAPER_OUT",
+      "firmware": "4.2.1",
+      "battery_percent": 100
+    },
+    "transactions": [
+      {"id": "TX-55020", "days_ago": 1, "amount": 1250.00, "method": "credit", "installments": 6, "status": "approved"},
+      {"id": "TX-55011", "days_ago": 2, "amount": 480.00, "method": "debit", "installments": 1, "status": "approved"}
+    ],
+    "payouts": [
+      {"reference": "Sales of yesterday (credit, 1st installment)", "sales_day_offset": -1, "gross": 208.33, "fees": 9.10, "net": 199.23, "expected_in_days": 30, "status": "scheduled"},
+      {"reference": "Sales of 2 days ago (debit)", "sales_day_offset": -2, "gross": 480.00, "fees": 4.60, "net": 475.40, "expected_in_days": 0, "status": "processing"}
+    ],
+    "tickets": [
+      {"ticket_id": "TKT-0007", "category": "terminal", "summary": "Printer jams frequently", "status": "open", "days_ago": 3}
+    ]
+  }
+}

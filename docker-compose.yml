@@ -1,0 +1,30 @@
+services:
+  api:
+    build: .
+    image: getnet-agents:latest
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - ./data:/app/data   # persists the Chroma index, crawl cache and tickets across restarts
+    restart: unless-stopped
+
+  # One-shot jobs (not started by `docker compose up`):
+  #   docker compose run --rm ingest        -> build / refresh the knowledge base
+  #   docker compose run --rm eval          -> run the offline evaluation
+  ingest:
+    image: getnet-agents:latest
+    profiles: ["tools"]
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    command: ["python", "-m", "app.rag.ingest"]
+
+  eval:
+    image: getnet-agents:latest
+    profiles: ["tools"]
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./eval/reports:/app/eval/reports
+    command: ["python", "-m", "eval.run_eval"]
