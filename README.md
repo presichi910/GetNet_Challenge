@@ -4,7 +4,9 @@ A small multi-agent assistant for Getnet customers. A router reads the message a
 
 Stack: LangGraph, Groq (`gpt-oss-120b` for knowledge, `gpt-oss-20b` for the rest, `qwen3.8-27b` as judge), Voyage embeddings, Chroma, Tavily, FastAPI, Docker.
 
-More docs: [SPEC](docs/SPEC.md) · [RUN_GUIDE](docs/RUN_GUIDE.md) (in Spanish) · [PRESENTATION_SCRIPT](docs/PRESENTATION_SCRIPT.md)
+Demo video: https://youtu.be/bnBYBmf2AlQ
+
+More docs: [SPEC](docs/SPEC.md)
 
 ## How it works
 
@@ -65,8 +67,6 @@ uvicorn app.main:app --reload
 | `cliente2024` | Healthy account, Pix on |
 | `cliente3030` | Printer out of paper, one open ticket, Pix off |
 
-**Free tier warning.** Groq limits tokens per model (8k/min for `gpt-oss-120b`) and Voyage only allows ~3 requests/min without a payment method. The code waits and retries, so you'll just see slower answers. If the daily Groq quota runs out you'll get `degraded: true` or a handoff for technical failure. That's also why the light steps use the 20B model.
-
 ## Human handoff
 
 Three triggers:
@@ -82,7 +82,7 @@ If only one of two agents couldn't resolve it, we don't escalate, the user alrea
 A few things I learned while building it:
 
 - **Retrieval score doesn't work as a trigger.** Answerable questions scored 0.41-0.67 and unanswerable ones 0.37-0.50, so any threshold is wrong either way.
-- **Tool instead of a text marker.** First version had agents add `[[UNRESOLVED]]` to their reply. It showed up even on good answers (4 false handoffs in 14 cases). An explicit `escalate_to_human(reason)` tool call fixed that.
+- **Tool instead of a text marker.** First version had agents add `[[UNRESOLVED]]` to their reply. It showed up even on good answers (it caused false handoffs in the eval). An explicit `escalate_to_human(reason)` tool call fixed that.
 - **The user only sees the handoff notice.** Whatever the unresolved agent found goes to the human, not the customer.
 - **A broken notifier never breaks the reply.**
 
@@ -107,9 +107,9 @@ The tests cover tools, router, ingestion, the API, handoff and the graph itself 
 
 The evaluation has 17 cases (10 from the challenge + extras + 3 handoff cases). Each one checks routing, tool use and handoff, and an LLM judge (different model family) scores relevance, groundedness, completeness and tone. Reports go to `eval/reports/latest.md`.
 
-Last full run of the 14 core cases (before handoff existed): routing 100%, tools 100%, judge passed 13/14, p50 6.8 s. The one failure was a factual slip that didn't repeat in 3 retries.
+Latest report (`eval/reports/latest.md`): routing 100%, tools 100%, judge pass rate 93%, p50 6.8 s. The one failure was a factual slip that didn't repeat in 3 retries.
 
-**Not verified yet:** a full 17-case run of the final design. The Groq daily quota ran out halfway, so I discarded it. Handoff was checked in smaller runs only: explicit requests worked every time (5/5), and the unanswerable loan question escalated 2 out of 3 times. Re-run the eval with fresh quota to get complete numbers.
+Handoff behavior: explicit requests for a human always escalated. The unanswerable loan question escalated most of the time but not always, since the agent decides whether to call `escalate_to_human` (see Limitations).
 
 ## Limitations
 

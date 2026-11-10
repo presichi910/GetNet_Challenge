@@ -17,3 +17,5 @@ eval/reports/*
 
 # Personal how-to, not part of the deliverable
 docs/GITHUB_GUIDE.md
+
+*.mp4

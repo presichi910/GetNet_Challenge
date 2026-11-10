@@ -105,27 +105,50 @@ def summarize(rows: list[dict]) -> dict:
     return s
 
 
-def write_report(rows: list[dict], summary: dict) -> Path:
-    out = ROOT / "reports"
-    out.mkdir(exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    (out / f"{stamp}.json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
-    lines = ["# Evaluation report", "", f"_Generated {stamp}_", "", "## Summary", ""]
-    lines += [f"- **{k}**: {v:.2f}" if isinstance(v, float) else f"- **{k}**: {v}" for k, v in summary.items()]
+MAX_SCORE = 5  # judge scale is 1-5; reports show it as a percentage of the maximum
+
+
+def _score_pct(v) -> str:
+    return "-" if v is None else f"{v / MAX_SCORE * 100:.0f}%"
+
+
+def render_report(rows: list[dict], summary: dict, stamp: str) -> str:
+    """Markdown report. Rates and judge scores are shown as percentages."""
+    lines = ["# Evaluation report", "", f"_Generated {stamp}_", "", "## Summary", "",
+             f"_Judge scores are shown as a percentage of the maximum ({MAX_SCORE})._", ""]
+    for k, v in summary.items():
+        if k == "cases":
+            continue
+        if k.startswith("avg_"):
+            lines.append(f"- **{k}**: {_score_pct(v)}")
+        elif k.endswith(("_accuracy", "_rate")):
+            lines.append(f"- **{k}**: {v * 100:.0f}%")
+        else:
+            lines.append(f"- **{k}**: {v}")
     lines += ["", "## Cases", "", "| id | route | tools | handoff | rel | grounded | compl | tone | verdict | ms |", "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         j = r.get("judge", {})
         h_ok = {True: "OK", False: "FAIL", None: "-"}[r.get("handoff_ok")]
         lines.append(f"| {r['id']} | {'OK' if r['routing_ok'] else 'FAIL'} {r.get('plan', '')} | {'OK' if r['tools_ok'] else 'FAIL'} "
-                     f"| {h_ok} {r.get('handoff') or ''} | {j.get('relevance', '-')} | {j.get('groundedness', '-')} | {j.get('completeness', '-')} | {j.get('tone', '-')} "
+                     f"| {h_ok} {r.get('handoff') or ''} | {_score_pct(j.get('relevance'))} | {_score_pct(j.get('groundedness'))} "
+                     f"| {_score_pct(j.get('completeness'))} | {_score_pct(j.get('tone'))} "
                      f"| {j.get('verdict', '-')} | {r['latency_ms']} |")
     failures = [r for r in rows if r.get("judge", {}).get("verdict") == "fail"]
     if failures:
         lines += ["", "## Judge failures", ""]
         lines += [f"- **{r['id']}**: {r['judge']['reason']}" for r in failures]
+    return "\n".join(lines)
+
+
+def write_report(rows: list[dict], summary: dict) -> Path:
+    out = ROOT / "reports"
+    out.mkdir(exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    (out / f"{stamp}.json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
+    text = render_report(rows, summary, stamp)
     path = out / f"{stamp}.md"
-    path.write_text("\n".join(lines), encoding="utf-8")
-    (out / "latest.md").write_text("\n".join(lines), encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
+    (out / "latest.md").write_text(text, encoding="utf-8")
     return path
 
 
