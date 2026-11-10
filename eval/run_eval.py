@@ -1,14 +1,11 @@
-"""Offline evaluation harness.
+"""Offline evaluation.
 
-    python -m eval.run_eval                 # all cases, in-process graph
-    python -m eval.run_eval --only q05 x01  # subset (id prefixes)
-    python -m eval.run_eval --no-judge      # deterministic checks only (routing + tool use)
+    python -m eval.run_eval                 # all cases
+    python -m eval.run_eval --only q05 x01  # only these ids (prefix)
+    python -m eval.run_eval --no-judge      # skip the LLM judge
 
-Three layers of signal per case:
-  1. Routing accuracy   (deterministic) - did the router pick the right specialists?
-  2. Tool-use accuracy  (deterministic) - did the agents call the tools that should ground the answer?
-  3. Answer quality     (LLM judge)     - relevance / groundedness / completeness / tone, 1-5.
-Also reports latency (p50/p95) and the share of degraded responses.
+Per case: routing check, tool check, handoff check, and the LLM judge (relevance,
+groundedness, completeness, tone, 1-5). Also latency p50/p95 and degraded rate.
 """
 from __future__ import annotations
 
@@ -41,7 +38,7 @@ def tools_ok(case: dict, called: list[str]) -> bool:
 
 
 def handoff_ok(case: dict, reason: str | None) -> bool | None:
-    """True/False when the case states an expectation (`expect_handoff`), None when it does not care."""
+    """True/False if the case has `expect_handoff`, None if it doesn't care."""
     expected = case.get("expect_handoff")
     return None if expected is None else (reason is not None) == expected
 
@@ -59,7 +56,7 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float) -> l
     for c in cases:
         print(f"-> {c['id']}: {c['message']}")
         try:
-            # unique thread per case: no cross-case conversation memory
+            # new thread per case, no shared memory
             state, latency = service.run_raw(c["message"], c["user_id"], thread_id=f"eval-{run_id}-{c['id']}")
         except Exception as e:  # noqa: BLE001
             rows.append({"id": c["id"], "error": str(e), "routing_ok": False, "tools_ok": False, "latency_ms": 0})
@@ -67,7 +64,7 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float) -> l
         outs = state.get("agent_outputs", {})
         called = [tc["name"] for o in outs.values() for tc in o.get("tool_calls", [])]
         evidence = [ctx for o in outs.values() for ctx in o.get("contexts", [])]
-        if state.get("handoff"):  # the judge must see that the handoff really happened (ids are not invented)
+        if state.get("handoff"):  # so the judge knows the handoff really happened
             evidence.append(f"[handoff system action] a human handoff record and ticket were created: {state['handoff']}")
         row = {
             "id": c["id"], "message": c["message"], "plan": state.get("plan", []),
@@ -82,7 +79,7 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float) -> l
             row["judge"] = judge.score(c["message"], row["answer"], evidence, c.get("criteria", ""))
         rows.append(row)
         if pause:
-            time.sleep(pause)  # be gentle with provider rate limits
+            time.sleep(pause)  # avoid rate limits
     return rows
 
 
@@ -99,7 +96,7 @@ def summarize(rows: list[dict]) -> dict:
     }
     checked = [r["handoff_ok"] for r in rows if r.get("handoff_ok") is not None]
     if checked:
-        s["handoff_accuracy"] = sum(checked) / len(checked)  # right call on every case that states an expectation
+        s["handoff_accuracy"] = sum(checked) / len(checked)  # only cases with an expectation
     s["handoff_rate"] = sum(bool(r.get("handoff")) for r in rows) / n if n else 0
     if judged:
         for k in SCORE_KEYS:

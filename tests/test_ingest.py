@@ -25,7 +25,7 @@ def test_title_from_heading_or_url():
 
 def test_chunks_have_metadata_and_stable_ids():
     docs = chunk_pages({"https://www.getnet.com.br/get-smart": PAGE, "https://x/tiny": "short"})
-    assert docs and all(d.metadata["url"] == "https://www.getnet.com.br/get-smart" for d in docs)  # tiny page dropped
+    assert docs and all(d.metadata["url"] == "https://www.getnet.com.br/get-smart" for d in docs)  # tiny page is dropped
     assert docs[0].page_content.startswith("Get Smart")
     ids = [doc_id(d) for d in docs]
     assert len(set(ids)) == len(ids)
@@ -33,7 +33,7 @@ def test_chunks_have_metadata_and_stable_ids():
 
 
 def test_retrieval_uses_separate_pools_and_embeds_once(monkeypatch):
-    """Web pages get k-2 slots and PDFs at most 2, with a single embedding call."""
+    """Web pages get k-2 slots, PDFs at most 2, one embedding call."""
     from langchain_core.documents import Document
 
     from app.rag import store as store_mod
@@ -59,7 +59,7 @@ def test_retrieval_uses_separate_pools_and_embeds_once(monkeypatch):
     assert calls["filters"] == [(3, {"is_pdf": False}), (2, {"is_pdf": True})]
     assert len(hits) == 5 and sum(d.page_content.startswith("pdf") for d, _ in hits) == 2
     dists = [dist for _, dist in hits]
-    assert dists == sorted(dists) and dists[0] == 0.2  # smallest distance (best) first, values untouched
+    assert dists == sorted(dists) and dists[0] == 0.2  # best first
 
 
 def test_embedding_backoff_retries_on_rate_limit_then_succeeds(monkeypatch):

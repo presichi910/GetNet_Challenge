@@ -1,4 +1,4 @@
-"""Thin service layer between the HTTP API (or the eval harness) and the compiled graph."""
+"""Sits between the API (or the eval) and the graph."""
 from __future__ import annotations
 
 import logging
@@ -17,7 +17,7 @@ class ChatService:
         self.graph = graph
 
     def run_raw(self, message: str, user_id: str, thread_id: str | None = None) -> tuple[dict, int]:
-        """Invoke the graph; returns (final state, latency_ms)."""
+        """Run the graph. Returns (state, latency_ms)."""
         t0 = time.perf_counter()
         state = self.graph.invoke(
             {"messages": [HumanMessage(content=message)], "user_id": user_id},
@@ -52,7 +52,7 @@ class ChatService:
             latency_ms=latency_ms,
             trace_id=trace_id,
         )
-        # One structured line per request: easy to ship to any log stack / build dashboards on.
+        # one log line per request
         log.info("trace=%s user=%s plan=%s used=%s tools=%s degraded=%s handoff=%s latency_ms=%d",
                  trace_id, user_id, resp.routing.plan, resp.agents_used,
                  [t.name for t in tool_calls], resp.degraded, resp.handoff.reason if resp.handoff else None, latency_ms)

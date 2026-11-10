@@ -11,10 +11,10 @@ Audience: the evaluators of the AI Hardcore Engineer challenge. Read the **Say**
 | 2:00-5:30 | Architecture and message workflow | Flow diagram below, `app/graph.py` |
 | 5:30-7:30 | RAG pipeline | `app/rag/ingest.py`, Chroma stats |
 | 7:30-8:45 | Support agent and tools | `app/tools/customer_tools.py` |
-| 8:45-10:15 | Human handoff (bonus) | `app/handoff.py`, handoff diagram |
+| 8:45-10:15 | Human handoff (bonus) | `app/handoff.py`, flow diagram |
 | 10:15-13:00 | Live demo (4 scenarios) | Terminal / Swagger at `/docs` |
 | 13:00-14:15 | Testing and evaluation | `pytest`, `eval/reports/latest.md` |
-| 14:15-14:45 | Trade-offs and next steps | README sections 6-7 |
+| 14:15-14:45 | Trade-offs and next steps | README (Limitations) |
 
 Aim to finish at about 14:45: the limit is 15 minutes.
 
@@ -22,56 +22,18 @@ Aim to finish at about 14:45: the limit is 15 minutes.
 
 ```mermaid
 flowchart TD
-    U([User message + user_id]) --> API[FastAPI POST /chat<br/>payload validation]
-    API --> G0[LangGraph StateGraph<br/>thread_id = user_id => memory]
-    G0 --> R{{Router Agent<br/>LLM structured output<br/>plan, language, wants_human}}
-
-    R -- "wants_human" --> HO
-    R -- "plan: []" --> SYN
-    R -- "plan: [support]" --> SUP
-    R -- "plan: [knowledge]" --> KNO
-    R -- "plan: [support, knowledge]" --> SUP
-
-    SUP[Customer Support Agent<br/>tools bound to user_id<br/>+ escalate_to_human] --> NX{next in plan?}
-    NX -- yes --> KNO
-    NX -- "no: nobody resolved<br/>or all failed" --> HO
-    NX -- "no: resolved" --> SYN
-
-    KNO[Knowledge Agent<br/>+ escalate_to_human] --> RAG[(search_getnet_kb<br/>Chroma + Voyage)]
-    KNO --> WEB[(web_search<br/>Tavily)]
-    SUP --> TOOLS[(profile, transactions,<br/>payouts, terminal, tickets)]
-    KNO --> NX2{done?}
-    NX2 -- "nobody resolved<br/>or all failed" --> HO
-    NX2 -- resolved --> SYN
-
-    SYN[Synthesizer<br/>0 agents: direct reply<br/>1 agent: passthrough<br/>2 agents: merge] --> OUT([JSON: response, agents_used,<br/>sources, tool_calls, handoff,<br/>latency, trace_id])
-
-    HO[Human Handoff<br/>1. ticket 2. queue record<br/>3. notice in user's language] --> Q[(data/handoffs.jsonl<br/>operator queue)]
-    HO --> OUT
-
-    subgraph OFFLINE [Offline: ingestion]
-        T1[Tavily crawl + topic search + extract] --> T2[Clean + chunk] --> T3[Voyage embeddings] --> T4[(Chroma)]
-    end
-    T4 -.-> RAG
-
-    subgraph EVAL [Offline: evaluation]
-        E1[dataset.jsonl<br/>17 cases] --> E2[Run graph] --> E3[Routing + tool + handoff checks]
-        E2 --> E4[LLM judge: different model family]
-    end
-```
-
-ASCII fallback if Mermaid does not render:
-
-```
- user --> FastAPI --> [ Router ] --plan--> [ Support ] --> [ Knowledge ] --> [ Synthesizer ] --> JSON
-                          |                    |                |                  ^
-                          |                    v                v                  |
-                          |             customer tools     Chroma / Tavily         |
-                          +----------------- plan = [] ---------------------------+
-                          |                    |                |
-                          | user asks          | nobody resolved / all failed
-                          | for a human        v                v
-                          +---------------> [ Human Handoff ] --> ticket + data/handoffs.jsonl --> JSON
+    U[User] --> API[API /chat]
+    API --> R[Router]
+    R --> S[Support agent]
+    R --> K[Knowledge agent]
+    S --> K
+    S --> Y[Synthesizer]
+    K --> Y
+    R -->|asks for a human| H[Human handoff]
+    S -->|can't resolve| H
+    K -->|can't resolve| H
+    Y --> A[Answer]
+    H --> A
 ```
 
 ---
@@ -132,7 +94,7 @@ ASCII fallback if Mermaid does not render:
 - "Second, the first version had agents append a text marker when they couldn't resolve something. The evaluation showed it over-fired: it was added even to perfect answers, giving four false handoffs in fourteen clear cases. I replaced it with an explicit `escalate_to_human` tool call, a deliberate action, and the false positives disappeared in my repeat tests. As a bonus the agent's stated reason now reaches the operator."
 - "One more safeguard: if an agent escalates, the customer only sees the handoff notice. In one run, the knowledge agent presented a generic contract clause as the customer's loan rate right before escalating. Content from an agent that doesn't trust its own answer shouldn't be shown."
 
-**Show:** the three triggers in `handoff_reason` in `app/handoff.py`; the handoff branches in the diagram.
+**Show:** the three triggers in `handoff_reason` in `app/handoff.py`; the handoff arrows in the diagram.
 
 ## 7. Live demo (10:15-13:00)
 

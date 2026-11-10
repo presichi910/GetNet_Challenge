@@ -1,9 +1,7 @@
-"""The agents' way to say "I cannot resolve this": an explicit tool call.
+"""How an agent says "I can't resolve this": it calls a tool.
 
-An earlier design used a text marker appended to the reply. Measured on the evaluation set it was
-over-applied (the model appended it even after a perfect answer, e.g. a sourced exchange rate),
-because a trailing marker reads like a mandatory output format. A tool call is a deliberate action,
-and its `reason` argument travels to the human operator.
+A text marker at the end of the reply was tried first, but the model added it even to good
+answers. A tool call is more deliberate, and the `reason` goes to the human.
 """
 from langchain_core.tools import tool
 

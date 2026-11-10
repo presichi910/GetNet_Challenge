@@ -1,16 +1,10 @@
-"""The orchestration: a LangGraph StateGraph.
+"""The LangGraph graph.
 
-    START -> router --+--(user asked for a human)------------------------------------> handoff -> END
-                      |
-                      +--(plan[0])--> agent --(plan[1])--> agent --> ... --+--(nobody resolved)--> handoff -> END
-                      |                                                    |
-                      +--(plan is empty)-----------------------------------+--(resolved)---------> synthesizer -> END
+    router -> agents in the plan, one by one -> synthesizer
+    router (user wants a human) or agents (nobody resolved it) -> handoff
 
-Each agent node appends its result to `state["agent_outputs"]` and bumps `step`. A single
-conditional-edge function (`next_node`) reads the router's plan and sends control to the next
-specialist; when the plan is exhausted it asks `handoff_reason` whether a human must take over
-(explicit request, technical failure, or no agent could resolve it) and routes to `handoff` or
-`synthesizer`. Later agents see earlier outputs.
+`next_node` picks where to go next: the next agent in the plan, then handoff or synthesizer.
+Each agent saves its result in `agent_outputs`, so later agents can read earlier ones.
 """
 from __future__ import annotations
 
@@ -27,7 +21,7 @@ AGENT_NODES = ("knowledge", "support")
 
 def next_node(state: GraphState) -> str:
     if state.get("wants_human"):
-        return "handoff"  # explicit request: do not waste LLM calls on specialists
+        return "handoff"  # user asked for a human, skip the agents
     plan, step = state.get("plan", []), state.get("step", 0)
     if step < len(plan):
         return plan[step]
@@ -36,7 +30,7 @@ def next_node(state: GraphState) -> str:
 
 def build_graph(router: Callable, knowledge: Callable, support: Callable, synthesizer: Callable,
                 handoff: Callable, checkpointer=None):
-    """Nodes are injected so tests can swap LLM-backed agents for deterministic stubs."""
+    """Nodes are passed in so tests can use stubs."""
     g = StateGraph(GraphState)
     g.add_node("router", router)
     g.add_node("knowledge", knowledge)
@@ -51,7 +45,7 @@ def build_graph(router: Callable, knowledge: Callable, support: Callable, synthe
     g.add_edge("synthesizer", END)
     g.add_edge("handoff", END)
 
-    # thread_id == user_id gives each customer their own multi-turn memory.
+    # thread_id = user_id, so each customer has their own memory
     return g.compile(checkpointer=checkpointer or MemorySaver())
 
 
@@ -64,6 +58,6 @@ def build_default_graph():
     from app.data.repository import CustomerRepository
     from app.handoff import make_handoff_node
 
-    repo = CustomerRepository(tickets_file=get_settings().tickets_file)  # shared: handoff tickets show up for Support
+    repo = CustomerRepository(tickets_file=get_settings().tickets_file)  # shared, so handoff tickets show up for Support
     return build_graph(make_router_node(), make_knowledge_node(), make_support_node(repo=repo),
                        make_synthesizer_node(), make_handoff_node(repo=repo))

@@ -10,7 +10,7 @@ class Source(BaseModel):
     url: str
     title: str = ""
     type: str = ""  # "kb" | "web"
-    relevance: float | None = None  # KB only: 1 - cosine distance of the best chunk
+    relevance: float | None = None  # KB only
 
 
 class ToolCall(BaseModel):
@@ -39,7 +39,7 @@ class ChatResponse(BaseModel):
     routing: Routing
     sources: list[Source] = []
     tool_calls: list[ToolCall] = []
-    degraded: bool = False  # True when at least one specialist failed
-    handoff: HandoffInfo | None = None  # set when the case was passed to a human
+    degraded: bool = False  # True if an agent failed
+    handoff: HandoffInfo | None = None  # set when a human takes over
     latency_ms: int
     trace_id: str

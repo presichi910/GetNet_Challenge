@@ -1,19 +1,16 @@
-"""Human handoff: decide WHEN a person must take over, and hand the case over with full context.
+"""Human handoff: when a person takes over, and what happens then.
 
-Three triggers (all deterministic given the state, so they are cheap and unit-testable):
-  user_requested     the router saw an explicit request for a human          -> skips the specialists
-  technical_failure  every specialist in the plan failed (LLM/tool errors)
-  agent_unresolved   no specialist could resolve it: each successful agent ended its reply with
-                     the [[UNRESOLVED]] marker (see prompts). Mixed outcomes (one resolved, one
-                     not) are NOT escalated: the customer got something useful.
+Three triggers:
+  user_requested     the user asked for a human, agents are skipped
+  technical_failure  every agent in the plan failed
+  agent_unresolved   every agent that answered called `escalate_to_human`
+                     (if only some did, we don't escalate, the user got something useful)
 
-Why not a retrieval-score threshold? Measured on this corpus, answerable questions scored
-0.41-0.67 and unanswerable ones 0.37-0.50 (they overlap), so a score cannot separate them.
-The agent's own "I could not resolve this" is a better confidence signal.
+A retrieval score doesn't work as a trigger: answerable and unanswerable questions scored
+about the same (0.41-0.67 vs 0.37-0.50).
 
-What a handoff does: opens a ticket (if the customer exists), appends a record to a queue file that a
-human operator would consume (`HandoffNotifier` is the plug-in point for Slack/Teams/webhook), and
-tells the user what happened, in their language.
+On handoff we open a ticket (if the customer exists), write a record to the queue file
+and tell the user in their language. `HandoffNotifier` is where Slack/Teams would plug in.
 """
 from __future__ import annotations
 
@@ -35,7 +32,7 @@ log = logging.getLogger("handoff")
 
 PRIORITY = {"technical_failure": "high", "agent_unresolved": "normal", "user_requested": "normal"}
 
-# {ref} is the human-readable reference the customer can quote.
+# {ref} is the reference the customer can quote
 NOTICES = {
     "English": {
         "user_requested": "Of course. I've passed your case to a human agent.",
@@ -59,12 +56,12 @@ NOTICES = {
 
 
 def handoff_reason(state: dict) -> str | None:
-    """Pure function of the state: why a human must take over, or None."""
+    """Why a human must take over, or None."""
     if state.get("wants_human"):
         return "user_requested"
     plan = state.get("plan") or []
     if not plan:
-        return None  # greeting / clarification: nothing to escalate
+        return None  # greeting or unclear, nothing to escalate
     outs = state.get("agent_outputs", {})
     ok = [outs[a] for a in plan if a in outs and outs[a].get("answer") and not outs[a].get("error")]
     if not ok:
@@ -79,9 +76,9 @@ class HandoffNotifier(Protocol):
 
 
 class FileQueueNotifier:
-    """Default notifier: append to a JSONL queue and log a WARNING line.
+    """Default notifier: appends to a JSONL file and logs a warning.
 
-    Swap for a Slack/Teams/e-mail/webhook notifier by implementing `notify(record)`.
+    For Slack/Teams/email, write another class with `notify(record)`.
     """
 
     def __init__(self, path: str | Path):
@@ -132,14 +129,13 @@ def make_handoff_node(repo: CustomerRepository | None = None, notifier: HandoffN
         }
         try:
             queue.notify(record)
-        except Exception:  # noqa: BLE001 - the customer must still get an answer
+        except Exception:  # noqa: BLE001 - the customer still gets a reply
             log.exception("Handoff notifier failed for %s", handoff_id)
 
         ref = f"{handoff_id} / {ticket_id}" if ticket_id else handoff_id
         notice = compose_notice(reason, state.get("language", "English"), ref)
-        # The customer only sees the notice. Whatever the agents found travels in the record for the human:
-        # content from an agent that flagged itself as unresolved is not trustworthy enough to show
-        # (a measured failure: Knowledge presented a generic contract clause as "your loan's rate").
+        # the customer only sees the notice; what the agents found goes to the human in the record
+        # (an unresolved agent once passed off a generic contract clause as "your loan's rate")
         answer = notice
 
         info = {"id": handoff_id, "reason": reason, "priority": PRIORITY[reason], "ticket_id": ticket_id}

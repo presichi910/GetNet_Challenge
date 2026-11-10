@@ -1,4 +1,4 @@
-"""Human handoff: trigger logic, the handoff node's side effects, and graph routing."""
+"""Handoff tests: triggers, the node, and routing."""
 import json
 
 import pytest
@@ -17,15 +17,15 @@ UNRESOLVED = {"answer": "I could not confirm it", "error": None, "unresolved": T
 FAILED = {"answer": "", "error": "boom", "unresolved": False, "tool_calls": []}
 
 
-# ------------------------------------------------------------------ trigger logic
+# triggers
 @pytest.mark.parametrize("state, expected", [
     ({"wants_human": True, "plan": []}, "user_requested"),
-    ({"plan": []}, None),  # greeting: nothing to escalate
+    ({"plan": []}, None),  # greeting
     ({"plan": ["knowledge"], "agent_outputs": {"knowledge": OK}}, None),
     ({"plan": ["knowledge"], "agent_outputs": {"knowledge": FAILED}}, "technical_failure"),
     ({"plan": ["support", "knowledge"], "agent_outputs": {"support": FAILED, "knowledge": FAILED}}, "technical_failure"),
     ({"plan": ["knowledge"], "agent_outputs": {"knowledge": UNRESOLVED}}, "agent_unresolved"),
-    # mixed outcomes are NOT escalated: the customer got something useful
+    # mixed outcomes don't escalate
     ({"plan": ["support", "knowledge"], "agent_outputs": {"support": OK, "knowledge": UNRESOLVED}}, None),
     ({"plan": ["support", "knowledge"], "agent_outputs": {"support": FAILED, "knowledge": OK}}, None),
     ({"plan": ["support", "knowledge"], "agent_outputs": {"support": UNRESOLVED, "knowledge": UNRESOLVED}}, "agent_unresolved"),
@@ -35,12 +35,12 @@ def test_handoff_reason(state, expected):
 
 
 def test_next_node_routes_to_handoff():
-    assert next_node({"wants_human": True, "plan": ["knowledge"], "step": 0}) == "handoff"  # skips specialists
+    assert next_node({"wants_human": True, "plan": ["knowledge"], "step": 0}) == "handoff"  # skips agents
     assert next_node({"plan": ["knowledge"], "step": 1, "agent_outputs": {"knowledge": UNRESOLVED}}) == "handoff"
     assert next_node({"plan": ["knowledge"], "step": 1, "agent_outputs": {"knowledge": OK}}) == "synthesizer"
 
 
-# ------------------------------------------------------------------ the marker never reaches the user
+# escalate tool
 def _tools(repo):
     from app.tools.customer_tools import make_support_tools
 
@@ -54,7 +54,7 @@ def test_calling_the_escalate_tool_marks_the_agent_unresolved_and_keeps_the_reas
     )
     res = run_tool_agent("support", llm, _tools(repo), "sys", [HumanMessage(content="q")])
     assert res["unresolved"] is True and res["error"] is None
-    assert res["tool_calls"][0] == {"name": "escalate_to_human", "args": {"reason": "no loan data"}}  # the human sees why
+    assert res["tool_calls"][0] == {"name": "escalate_to_human", "args": {"reason": "no loan data"}}  # the human sees the reason
 
 
 def test_escalating_without_any_final_text_is_not_a_technical_failure(repo):
@@ -72,7 +72,7 @@ def test_a_normal_answer_is_not_unresolved(repo):
     assert res["unresolved"] is False and res["answer"] == "All good."
 
 
-# ------------------------------------------------------------------ router
+# router
 class _Structured:
     def __init__(self, decision):
         self.decision = decision
@@ -91,7 +91,7 @@ def test_router_forces_empty_plan_when_user_wants_human():
     assert out["wants_human"] is True and out["plan"] == [] and out["handoff"] is None
 
 
-# ------------------------------------------------------------------ the handoff node
+# handoff node
 def make_node(repo, tmp_path):
     return make_handoff_node(repo=repo, notifier=FileQueueNotifier(tmp_path / "handoffs.jsonl"))
 
@@ -112,7 +112,7 @@ def test_handoff_creates_ticket_queue_record_and_notice(repo, tmp_path):
     record = json.loads((tmp_path / "handoffs.jsonl").read_text(encoding="utf-8").strip())
     assert record["user_id"] == "cliente1988" and record["user_message"].startswith("My terminal")
     assert record["conversation"][0]["role"] == "human"
-    assert repo.get_tickets("cliente1988")[-1]["ticket_id"] == info["ticket_id"]  # visible to the Support agent too
+    assert repo.get_tickets("cliente1988")[-1]["ticket_id"] == info["ticket_id"]  # Support can see it too
 
 
 def test_handoff_for_unknown_customer_has_no_ticket_but_still_queues(repo, tmp_path):
@@ -124,11 +124,11 @@ def test_handoff_for_unknown_customer_has_no_ticket_but_still_queues(repo, tmp_p
 def test_unresolved_findings_go_to_the_human_not_to_the_customer(repo, tmp_path):
     outs = {"knowledge": {**UNRESOLVED, "tool_calls": [{"name": "search_getnet_kb", "args": {"query": "x"}}]}}
     out = make_node(repo, tmp_path)(base_state(plan=["knowledge"], agent_outputs=outs))
-    assert "I could not confirm it" not in out["final_answer"]  # low-confidence content is never shown
+    assert "I could not confirm it" not in out["final_answer"]  # never shown to the customer
     assert out["handoff"]["id"] in out["final_answer"]
     assert out["handoff"]["reason"] == "agent_unresolved" and out["handoff"]["priority"] == "normal"
     record = json.loads((tmp_path / "handoffs.jsonl").read_text(encoding="utf-8").strip())
-    assert record["agent_findings"]["knowledge"] == "I could not confirm it"  # ...but the operator gets it
+    assert record["agent_findings"]["knowledge"] == "I could not confirm it"  # but the operator gets it
     assert record["tool_calls"] == [{"agent": "knowledge", "name": "search_getnet_kb", "args": {"query": "x"}}]
 
 
@@ -152,7 +152,7 @@ def test_notice_is_localised_with_english_fallback(language, snippet):
     assert snippet in compose_notice("user_requested", language, "HND-1")
 
 
-# ------------------------------------------------------------------ end to end through the real graph
+# through the real graph
 def graph_with(plan, outputs, repo, tmp_path, wants_human=False):
     calls = []
 
@@ -193,7 +193,7 @@ def test_resolved_agent_has_no_handoff(repo, tmp_path):
 
 
 def test_handoff_does_not_leak_into_the_next_turn_of_the_same_user(repo, tmp_path):
-    """Same thread, two turns: the router resets wants_human/handoff, so turn 2 is a normal answer."""
+    """Same user, two turns: turn 2 is a normal answer."""
     flags = iter([True, False])
     calls = []
 

@@ -13,7 +13,7 @@ def repo(tmp_path):
 
 
 class ToolFakeModel(GenericFakeChatModel):
-    """Scripted chat model that tolerates `bind_tools` (needed by create_agent)."""
+    """Fake chat model that accepts `bind_tools`."""
 
     def bind_tools(self, tools, **kwargs):
         return self

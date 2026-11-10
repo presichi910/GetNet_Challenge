@@ -1,4 +1,4 @@
-"""Agent 2: Knowledge. RAG over Getnet's website (Chroma) + Tavily web search for everything else."""
+"""Knowledge agent: RAG over the Getnet site, plus web search for everything else."""
 from __future__ import annotations
 
 from app.agents.common import format_prior_context, recent_dialogue, run_tool_agent

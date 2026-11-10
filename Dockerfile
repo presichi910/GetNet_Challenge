@@ -6,14 +6,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Dependencies first: this layer is cached unless requirements.txt changes.
+# deps first so this layer is cached
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY app ./app
 COPY eval ./eval
 
-# Runtime state (Chroma index, raw crawl cache, tickets) lives in a mounted volume.
+# Chroma, crawl cache and tickets live in a mounted volume
 RUN mkdir -p /app/data
 ENV CHROMA_DIR=/app/data/chroma \
     RAW_DIR=/app/data/raw \

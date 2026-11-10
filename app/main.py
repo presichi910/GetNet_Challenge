@@ -1,4 +1,4 @@
-"""FastAPI entrypoint.   POST /chat  {"message": "...", "user_id": "..."}"""
+"""FastAPI app. POST /chat with {"message", "user_id"}."""
 from __future__ import annotations
 
 import logging
@@ -17,7 +17,7 @@ log = logging.getLogger("api")
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=get_settings().log_level,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    if getattr(app.state, "service", None) is None:  # tests inject their own service
+    if getattr(app.state, "service", None) is None:  # tests set their own service
         from app.graph import build_default_graph
         from app.rag.store import collection_size
 

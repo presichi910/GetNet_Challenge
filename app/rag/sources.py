@@ -1,9 +1,8 @@
 """What goes into the knowledge base.
 
-Two complementary strategies (both through Tavily):
-1. CRAWL the official sites from their entry points (breadth).
-2. TOPIC DISCOVERY: targeted site-restricted searches for the topics customers ask about most,
-   then EXTRACT those pages (depth). This guards against the crawler missing deep product pages.
+1. Crawl the official sites.
+2. Search for the topics customers ask about most and extract those pages,
+   in case the crawler missed some.
 """
 from dataclasses import dataclass
 
@@ -22,7 +21,7 @@ CRAWL_SOURCES = [
 
 ALLOWED_DOMAINS = ["getnet.net", "getnet.com.br"]
 
-# Topics that mirror the evaluation scenarios and real customer FAQs.
+# common customer topics
 TOPIC_QUERIES = [
     "Get Clássica maquininha",
     "Get Smart maquininha",

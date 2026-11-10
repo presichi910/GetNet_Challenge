@@ -1,4 +1,4 @@
-"""The evaluator itself is code: test its deterministic parts."""
+"""Tests for the evaluator."""
 import pytest
 
 from eval.judge import parse_judgement
@@ -8,7 +8,7 @@ from eval.run_eval import load_cases, pct, routing_ok, summarize, tools_ok
 def test_dataset_covers_all_challenge_scenarios():
     ids = [c["id"] for c in load_cases(None)]
     assert len([i for i in ids if i.startswith("q")]) == 10
-    assert len([i for i in ids if i.startswith("h")]) == 3  # handoff cases
+    assert len([i for i in ids if i.startswith("h")]) == 3  # handoff
     assert all({"id", "user_id", "message", "expected_agents"} <= set(c) for c in load_cases(None))
 
 
@@ -45,9 +45,9 @@ def test_handoff_ok_and_summary_metrics():
     from eval.run_eval import handoff_ok
 
     assert handoff_ok({"expect_handoff": True}, "user_requested") is True
-    assert handoff_ok({"expect_handoff": True}, None) is False     # missed escalation
+    assert handoff_ok({"expect_handoff": True}, None) is False     # missed
     assert handoff_ok({"expect_handoff": False}, "agent_unresolved") is False  # false alarm
-    assert handoff_ok({}, "agent_unresolved") is None              # no expectation -> not scored
+    assert handoff_ok({}, "agent_unresolved") is None              # no expectation
     rows = [{"routing_ok": True, "tools_ok": True, "latency_ms": 1, "handoff": "user_requested", "handoff_ok": True},
             {"routing_ok": True, "tools_ok": True, "latency_ms": 1, "handoff": None, "handoff_ok": False},
             {"routing_ok": True, "tools_ok": True, "latency_ms": 1, "handoff": "x", "handoff_ok": None}]

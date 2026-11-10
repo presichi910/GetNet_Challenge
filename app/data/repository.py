@@ -1,8 +1,4 @@
-"""Customer data access layer (mock backend).
-
-Swapping this class for a real CRM / acquirer API is the only change needed to go from demo to
-production; the tools and agents depend only on this interface.
-"""
+"""Customer data (mock). Swap this class for a real CRM and nothing else changes."""
 from __future__ import annotations
 
 import json
@@ -24,14 +20,14 @@ class CustomerRepository:
         self._tickets_file = Path(tickets_file) if tickets_file else None
         self._lock = threading.Lock()
 
-    # -- helpers -------------------------------------------------------------------------
+    # helpers
     def _iso(self, offset_days: int) -> str:
         return (self._today + timedelta(days=offset_days)).isoformat()
 
     def exists(self, user_id: str) -> bool:
         return user_id in self._data
 
-    # -- reads ---------------------------------------------------------------------------
+    # reads
     def get_profile(self, user_id: str) -> dict | None:
         c = self._data.get(user_id)
         return deepcopy(c["profile"]) if c else None
@@ -63,7 +59,7 @@ class CustomerRepository:
             p["sales_date"] = self._iso(p.pop("sales_day_offset"))
             days = p.pop("expected_in_days")
             p["expected_date"] = self._iso(days)
-            p["days_until_deposit"] = days  # explicit, so the model never has to do date arithmetic
+            p["days_until_deposit"] = days  # so the model doesn't do date math
             out.append(p)
         return out
 
@@ -78,7 +74,7 @@ class CustomerRepository:
             out.append(t)
         return out
 
-    # -- writes --------------------------------------------------------------------------
+    # writes
     def create_ticket(self, user_id: str, category: str, summary: str) -> dict | None:
         c = self._data.get(user_id)
         if not c:

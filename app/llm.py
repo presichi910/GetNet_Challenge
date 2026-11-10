@@ -1,4 +1,4 @@
-"""LLM factory. Everything that talks to Groq goes through here."""
+"""Creates the Groq LLMs."""
 from langchain_groq import ChatGroq
 
 from app.config import get_settings

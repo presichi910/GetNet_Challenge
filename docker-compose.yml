@@ -6,12 +6,12 @@ services:
       - "8000:8000"
     env_file: .env
     volumes:
-      - ./data:/app/data   # persists the Chroma index, crawl cache and tickets across restarts
+      - ./data:/app/data   # keeps the data between restarts
     restart: unless-stopped
 
-  # One-shot jobs (not started by `docker compose up`):
-  #   docker compose run --rm ingest        -> build / refresh the knowledge base
-  #   docker compose run --rm eval          -> run the offline evaluation
+  # one-off jobs (not started by `up`):
+  #   docker compose run --rm ingest   -> build the knowledge base
+  #   docker compose run --rm eval     -> run the evaluation
   ingest:
     image: getnet-agents:latest
     profiles: ["tools"]

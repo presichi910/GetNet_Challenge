@@ -1,4 +1,4 @@
-"""Chroma vector store + Voyage AI embeddings (shared by ingestion and retrieval)."""
+"""Chroma store and Voyage embeddings."""
 from __future__ import annotations
 
 from functools import lru_cache

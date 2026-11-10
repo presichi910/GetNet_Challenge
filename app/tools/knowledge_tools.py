@@ -1,7 +1,6 @@
-"""Tools for the Knowledge Agent: RAG over Getnet's website + live web search (Tavily).
+"""Tools for the Knowledge agent: search the Getnet KB and search the web.
 
-Both tools use `response_format="content_and_artifact"`: the LLM sees the text, while the
-structured sources travel as a ToolMessage artifact so the API can return citations.
+The LLM only sees the text. The sources travel separately (as an artifact) so the API can return them.
 """
 from __future__ import annotations
 
@@ -14,11 +13,11 @@ from app.config import get_settings
 
 log = logging.getLogger(__name__)
 
-PDF_SLOTS = 2  # of the k results, at most this many may come from long legal/manual PDFs
+PDF_SLOTS = 2  # max PDF results out of k
 
 
 def _embed_with_backoff(embeddings, query: str, attempts: int = 3, wait_s: float = 21.0):
-    """Embed a query, waiting out provider rate limits (Voyage free tier = 3 requests/min)."""
+    """Embed the query, waiting if Voyage rate limits us (free tier: 3 requests/min)."""
     for attempt in range(1, attempts + 1):
         try:
             return embeddings.embed_query(query)
@@ -31,11 +30,10 @@ def _embed_with_backoff(embeddings, query: str, attempts: int = 3, wait_s: float
 
 
 def retrieve(query: str, k: int) -> list[tuple]:
-    """Two-pool retrieval: web pages first, PDFs as a bounded supplement.
+    """Search web pages and PDFs separately, with a cap on PDFs.
 
-    Contracts and manuals are ~60% of the chunks and are dense with the same vocabulary
-    ("antecipação", "liquidação"), so plain top-k lets them crowd out the help/product pages
-    that actually answer customer questions. The query is embedded once and reused for both pools.
+    PDFs are ~60% of the chunks and would crowd out the pages that actually answer the question.
+    The query is embedded once for both searches.
     """
     from app.rag.store import get_embeddings, get_vector_store
 
@@ -43,8 +41,7 @@ def retrieve(query: str, k: int) -> list[tuple]:
     vec = _embed_with_backoff(get_embeddings(), query)
     pages = store.similarity_search_by_vector_with_relevance_scores(vec, k=k - PDF_SLOTS, filter={"is_pdf": False})
     pdfs = store.similarity_search_by_vector_with_relevance_scores(vec, k=PDF_SLOTS, filter={"is_pdf": True})
-    # NOTE: despite its name, Chroma's *_with_relevance_scores by-vector method returns the raw cosine
-    # DISTANCE (lower = better). Keep distances here; callers derive relevance as 1 - distance.
+    # careful: despite the name, this returns cosine distance (lower is better), relevance = 1 - distance
     return sorted(pages + pdfs, key=lambda x: x[1])
 
 
@@ -54,7 +51,7 @@ def search_getnet_kb(query: str) -> tuple[str, list[dict]]:
     receivables advance, payment links, terminals, troubleshooting). Returns the most relevant
     passages with their source URLs. Write the query as a self-contained question or keywords;
     English or Portuguese both work."""
-    from app.rag.store import collection_size, get_vector_store  # lazy: avoids loading Chroma at import
+    from app.rag.store import collection_size, get_vector_store  # lazy import
 
     s = get_settings()
     if collection_size() == 0:
@@ -62,7 +59,7 @@ def search_getnet_kb(query: str) -> tuple[str, list[dict]]:
                 "No Getnet passages are available."), []
     try:
         hits = retrieve(query, s.retrieval_k)
-    except Exception as e:  # network / rate limit on the embedding call
+    except Exception as e:  # network or rate limit
         log.exception("KB search failed")
         return f"Knowledge base search failed: {e}", []
 
@@ -85,7 +82,7 @@ def web_search(query: str, topic: str = "general") -> tuple[str, list[dict]]:
     """Live web search for general-purpose or time-sensitive questions that are NOT about
     Getnet (weather, exchange rates, news, general facts). Use topic='finance' for currency /
     market questions and topic='news' for current events. Include the place/date in the query."""
-    topic = topic if topic in ("general", "news", "finance") else "general"  # be lenient with model-chosen values
+    topic = topic if topic in ("general", "news", "finance") else "general"  # the model may send something else
     s = get_settings()
     if not s.tavily_api_key:
         return "Web search is not configured (missing TAVILY_API_KEY).", []

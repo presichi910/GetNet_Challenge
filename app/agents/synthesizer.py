@@ -1,9 +1,9 @@
-"""Final node: turns agent outputs into the single answer the user sees.
+"""Last node: builds the one answer the user sees.
 
-- 0 agents ran      -> answer directly (greeting / clarification / out of scope)
-- 1 agent succeeded -> pass its answer through untouched (saves a full LLM round-trip)
-- 2+ succeeded      -> LLM merge
-- all failed        -> static fallback message (graceful degradation)
+- no agents ran -> answer directly (greetings, unclear, out of scope)
+- 1 agent       -> pass its answer through
+- 2+ agents     -> merge them with the LLM
+- all failed    -> fixed fallback message
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def make_synthesizer_node(llm=None):
                 answer = FALLBACK_MESSAGE
         except Exception:
             log.exception("Synthesizer failed")
-            # Best effort: surface whatever a specialist produced instead of failing the request.
+            # use whatever an agent produced instead of failing
             answer = next((v["answer"] for v in ok.values()), FALLBACK_MESSAGE)
 
         return {"final_answer": answer, "messages": [AIMessage(content=answer)]}

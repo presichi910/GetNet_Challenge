@@ -1,4 +1,4 @@
-"""Shared state that flows through the LangGraph StateGraph."""
+"""State shared by the graph nodes."""
 from typing import Annotated, Literal, TypedDict
 
 from langchain_core.messages import AnyMessage
@@ -8,28 +8,28 @@ AgentName = Literal["knowledge", "support"]
 
 
 class AgentResult(TypedDict, total=False):
-    """What a specialist agent hands back to the orchestrator."""
+    """What an agent hands back."""
 
     agent: str
     answer: str
     sources: list[dict]  # [{"url": ..., "title": ...}]
     tool_calls: list[dict]  # [{"name": ..., "args": {...}}]
-    contexts: list[str]  # raw tool outputs, used by the evaluator for groundedness
+    contexts: list[str]  # raw tool outputs, for the evaluator
     error: str | None
-    unresolved: bool  # the agent itself said it could not resolve the request (low confidence)
+    unresolved: bool  # the agent said it couldn't resolve it
 
 
 class GraphState(TypedDict, total=False):
-    # Conversation memory (persisted per user_id by the checkpointer)
+    # conversation memory (one per user_id)
     messages: Annotated[list[AnyMessage], add_messages]
     user_id: str
 
-    # Per-turn fields. The router resets them on every turn.
+    # per-turn fields, the router resets them every turn
     plan: list[str]
     step: int
     language: str
     routing_reasoning: str
     agent_outputs: dict[str, AgentResult]
     final_answer: str
-    wants_human: bool  # the user explicitly asked for a person
-    handoff: dict | None  # set by the handoff node: {id, reason, priority, ticket_id}
+    wants_human: bool  # user asked for a person
+    handoff: dict | None  # set by the handoff node

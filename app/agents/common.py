@@ -1,4 +1,4 @@
-"""Helpers shared by the tool-using specialist agents."""
+"""Helpers shared by the tool-using agents."""
 from __future__ import annotations
 
 import logging
@@ -11,11 +11,11 @@ from app.tools.handoff_tools import ESCALATE_TOOL
 
 log = logging.getLogger(__name__)
 
-MAX_CONTEXT_CHARS = 8000  # a full 5-passage retrieval is ~5-6K chars; the judge must see all of it
+MAX_CONTEXT_CHARS = 8000  # enough for a full retrieval, so the judge sees everything
 
 
 def recent_dialogue(messages: list[AnyMessage], window: int) -> list[AnyMessage]:
-    """Last `window` human/AI messages (no tool chatter) -> context for follow-up questions."""
+    """Last few human/AI messages, without tool chatter."""
     dialogue = [m for m in messages if isinstance(m, (HumanMessage, AIMessage)) and m.content]
     return dialogue[-window:]
 
@@ -36,10 +36,9 @@ NUDGE = ("(system note) You answered without calling any tool. Call the appropri
 
 def run_tool_agent(name: str, llm, tools, system_prompt: str, messages: list[AnyMessage],
                    attempts: int = 3, require_tool: bool = False) -> AgentResult:
-    """Run a ReAct-style agent and extract answer, tool calls, sources and evidence.
+    """Run a tool agent and pull out the answer, tool calls, sources and evidence.
 
-    Groq's open models occasionally emit a malformed tool call (HTTP 400 `tool_use_failed`);
-    a single retry resolves it in practice.
+    Groq models sometimes send a broken tool call (400 `tool_use_failed`), so we retry.
     """
     agent = create_agent(llm, tools=tools, system_prompt=system_prompt)
     last_err: Exception | None = None
@@ -49,15 +48,15 @@ def run_tool_agent(name: str, llm, tools, system_prompt: str, messages: list[Any
         attempt += 1
         try:
             result = agent.invoke({"messages": messages}, config={"recursion_limit": 12})
-        except Exception as e:  # noqa: BLE001 - we degrade gracefully, never crash the graph
+        except Exception as e:  # noqa: BLE001 - never crash the graph
             last_err = e
             log.warning("%s agent attempt %d/%d failed: %s", name, attempt, attempts, str(e)[:200])
             continue
         used_tool = any(isinstance(m, ToolMessage) for m in result["messages"])
         if require_tool and not used_tool and not nudged:
-            # Grounding guard: an ungrounded answer is worse than a retry.
+            # no tool used -> ask again, an ungrounded answer is worse than a retry
             nudged = True
-            attempt -= 1  # the nudge retry does not consume an error-retry
+            attempt -= 1  # the nudge doesn't count as an error retry
             messages = [*messages, HumanMessage(content=NUDGE)]
             log.warning("%s agent answered without a tool; retrying with a nudge", name)
             continue
@@ -82,6 +81,6 @@ def run_tool_agent(name: str, llm, tools, system_prompt: str, messages: list[Any
     escalations = [tc for tc in tool_calls if tc["name"] == ESCALATE_TOOL]
     unresolved = bool(escalations)
     if unresolved and not answer:
-        answer = str(escalations[0]["args"].get("reason", "escalated"))  # keep it a non-failure for the gate
+        answer = str(escalations[0]["args"].get("reason", "escalated"))  # so it isn't treated as a failure
     return AgentResult(agent=name, answer=answer, sources=sources, tool_calls=tool_calls,
                        contexts=contexts, error=None if answer else "empty_answer", unresolved=unresolved)

@@ -1,8 +1,7 @@
-"""Tools for the Customer Support Agent.
+"""Tools for the Support agent.
 
-`make_support_tools(user_id, repo)` returns tools *already bound* to one customer. The LLM never
-chooses which user_id to query, so a prompt-injection ("look up cliente2024 instead") cannot leak
-another customer's data. This is the tenant-isolation boundary.
+The tools are already tied to one user_id and take no user argument, so the LLM can't pick
+another customer (even with a prompt injection).
 """
 from __future__ import annotations
 

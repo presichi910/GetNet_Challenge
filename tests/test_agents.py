@@ -1,4 +1,4 @@
-"""Agent-level tests with a scripted fake LLM: exercises real tool execution + result extraction."""
+"""Agent tests with a fake LLM (real tools, no network)."""
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.router import DEFAULT_PLAN, RoutingDecision, make_router_node, normalize_plan
@@ -72,27 +72,27 @@ def test_synthesizer_passthrough_merge_and_fallback():
     ok = lambda n: {"answer": f"{n} says hi", "error": None}  # noqa: E731
     base = {"messages": [HumanMessage(content="q")], "language": "English"}
 
-    # one agent -> passthrough (LLM must not be called)
+    # one agent: passthrough, no LLM call
     node = make_synthesizer_node(llm=scripted())
     assert node({**base, "plan": ["knowledge"], "agent_outputs": {"knowledge": ok("knowledge")}})["final_answer"] == "knowledge says hi"
 
-    # two agents -> merged by the LLM
+    # two agents: merged
     node = make_synthesizer_node(llm=scripted(AIMessage(content="merged answer")))
     two = {"support": ok("support"), "knowledge": ok("knowledge")}
     assert node({**base, "plan": ["support", "knowledge"], "agent_outputs": two})["final_answer"] == "merged answer"
 
-    # all failed -> static fallback
+    # all failed: fallback
     failed = {"knowledge": {"answer": "", "error": "x"}}
     assert node({**base, "plan": ["knowledge"], "agent_outputs": failed})["final_answer"] == FALLBACK_MESSAGE
 
 
 def test_knowledge_is_forced_to_use_a_tool(repo):
-    """If the model answers without calling a tool, it is nudged once and must ground itself."""
+    """If the model skips the tools, it gets nudged once."""
     from app.agents.common import run_tool_agent
     from app.tools.customer_tools import make_support_tools
 
     llm = scripted(
-        AIMessage(content="Here is an answer from memory."),  # ungrounded first attempt
+        AIMessage(content="Here is an answer from memory."),  # no tool used
         AIMessage(content="", tool_calls=[{"name": "get_terminal_status", "args": {}, "id": "c1"}]),
         AIMessage(content="Grounded answer."),
     )

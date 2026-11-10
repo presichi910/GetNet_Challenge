@@ -1,4 +1,4 @@
-"""Central configuration, loaded from environment variables / .env."""
+"""Settings, read from env vars / .env."""
 from functools import lru_cache
 from pathlib import Path
 
@@ -10,17 +10,17 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=PROJECT_ROOT / ".env", extra="ignore")
 
-    # API keys
+    # keys
     groq_api_key: str = ""
     tavily_api_key: str = ""
     voyage_api_key: str = ""
 
-    # Models
+    # models
     llm_model: str = "openai/gpt-oss-120b"
-    # Right-sized model for the router, support and synthesizer. Also spreads load: Groq TPM limits are per model.
+    # smaller model for router, support and synthesizer (Groq limits are per model)
     light_model: str = "openai/gpt-oss-20b"
     judge_model: str = "qwen/qwen3.8-27b"
-    reasoning_effort: str = "low"  # gpt-oss reasoning budget; "low" cuts latency and tokens a lot
+    reasoning_effort: str = "low"  # gpt-oss only, keeps it fast
     embedding_model: str = "voyage-3.5"
 
     # RAG
@@ -33,11 +33,11 @@ class Settings(BaseSettings):
     ingest_sleep_seconds: float = 21.0
     raw_dir: str = "./data/raw"
 
-    # Support agent
+    # support / handoff files
     tickets_file: str = "./data/tickets.jsonl"
-    handoffs_file: str = "./data/handoffs.jsonl"  # queue a human operator would consume
+    handoffs_file: str = "./data/handoffs.jsonl"  # what a human operator would read
 
-    # Conversation window handed to the router / agents (number of messages)
+    # how many past messages the agents see
     history_window: int = 6
 
     log_level: str = "INFO"

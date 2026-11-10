@@ -36,7 +36,7 @@ def test_unknown_user_returns_not_found(repo):
 
 
 def test_tools_are_bound_to_one_user(repo):
-    """The model cannot pick a different customer: tools take no user_id argument."""
+    """Tools take no user_id, so the model can't pick another customer."""
     for t in make_support_tools("cliente2024", repo):
         assert "user_id" not in t.args
     profile = json.loads(tools_by_name("cliente2024", repo)["get_customer_profile"].invoke({}))

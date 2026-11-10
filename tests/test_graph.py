@@ -1,4 +1,4 @@
-"""Orchestration tests: real StateGraph, deterministic stub agents (no network, no LLM)."""
+"""Graph tests: real graph, stub agents."""
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.graph import build_graph, next_node
@@ -82,7 +82,7 @@ def test_memory_is_per_user_and_per_turn_state_resets():
     bob = svc.graph.get_state({"configurable": {"thread_id": "bob"}}).values["messages"]
     assert [m.content for m in alice if isinstance(m, HumanMessage)] == ["first", "second"]
     assert [m.content for m in bob if isinstance(m, HumanMessage)] == ["other"]
-    # outputs of turn 1 must not leak into turn 2 (router resets them)
+    # turn 1 outputs must not leak into turn 2
     assert svc.handle("third", "alice").agents_used == ["knowledge"]
 
 
@@ -98,4 +98,4 @@ def test_degraded_flag_when_specialist_fails():
 
     r = ChatService(build_graph(router, failing, support, synth, handoff)).handle("q", "u1")
     assert r.degraded is True
-    assert r.handoff and calls[-1] == "handoff"  # every specialist failed -> a human takes over
+    assert r.handoff and calls[-1] == "handoff"  # all agents failed -> human

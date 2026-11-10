@@ -1,8 +1,4 @@
-"""LLM-as-judge: scores one (question, answer, evidence) triple.
-
-The judge runs on a different model family than the generator (JUDGE_MODEL) to reduce the
-well-known self-preference bias of LLM judges.
-"""
+"""LLM judge: scores one answer. Uses a different model family than the agents, to avoid bias."""
 from __future__ import annotations
 
 import json

@@ -1,4 +1,4 @@
-"""Agent 1: Router. Decides which specialists run, and in which order."""
+"""Router: decides which agents run and in what order."""
 from __future__ import annotations
 
 import logging
@@ -15,7 +15,7 @@ from app.prompts import ROUTER_PROMPT
 log = logging.getLogger(__name__)
 
 VALID_AGENTS = ("knowledge", "support")
-DEFAULT_PLAN = ["knowledge"]  # safest fallback: answers from public info, touches no customer data
+DEFAULT_PLAN = ["knowledge"]  # safe fallback, only public info
 
 
 class RoutingDecision(BaseModel):
@@ -28,9 +28,9 @@ class RoutingDecision(BaseModel):
 
 
 def normalize_plan(agents: list[str]) -> list[str]:
-    """Deduplicate, drop unknown names, and enforce 'support' before 'knowledge'."""
+    """Remove duplicates and unknown names, support goes first."""
     plan = [a for a in dict.fromkeys(agents) if a in VALID_AGENTS]
-    return sorted(plan, key=lambda a: 0 if a == "support" else 1)  # stable: support first
+    return sorted(plan, key=lambda a: 0 if a == "support" else 1)
 
 
 def make_router_node(llm=None):
@@ -48,13 +48,13 @@ def make_router_node(llm=None):
             reasoning, language = decision.reasoning, decision.language
             wants_human = decision.wants_human
             if wants_human:
-                plan = []  # no point running specialists: the case goes straight to a person
+                plan = []  # straight to a person, skip the agents
         except Exception:
             log.exception("Router failed; falling back to default plan")
             plan, reasoning, language, wants_human = list(DEFAULT_PLAN), "router_error_fallback", "English", False
 
         log.info("router plan=%s language=%s reason=%s", plan, language, reasoning)
-        # Reset every per-turn field: the checkpointer keeps state between turns of one user.
+        # reset the per-turn fields, the checkpointer keeps state between turns
         return {"plan": plan, "step": 0, "language": language, "routing_reasoning": reasoning,
                 "agent_outputs": {}, "final_answer": "", "wants_human": wants_human, "handoff": None}
 

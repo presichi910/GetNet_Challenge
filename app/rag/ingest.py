@@ -1,10 +1,9 @@
-"""RAG ingestion pipeline:  Tavily (crawl/search/extract) -> clean -> chunk -> Voyage embeddings -> Chroma.
+"""Builds the knowledge base: Tavily -> clean -> chunk -> Voyage embeddings -> Chroma.
 
-Usage:
-    python -m app.rag.ingest                # fetch with Tavily, then index
-    python -m app.rag.ingest --from-cache   # re-index from data/raw/pages.jsonl (no Tavily credits)
+    python -m app.rag.ingest                # fetch with Tavily and index
+    python -m app.rag.ingest --from-cache   # reuse data/raw/pages.jsonl, no Tavily credits
     python -m app.rag.ingest --reset        # wipe the collection first
-    python -m app.rag.ingest --url https://www.getnet.com.br/some-page   # add specific pages
+    python -m app.rag.ingest --url <page>   # add a specific page
 """
 from __future__ import annotations
 
@@ -29,7 +28,7 @@ log = logging.getLogger("ingest")
 MIN_PAGE_CHARS = 200
 
 
-# ----------------------------------------------------------------------------- fetching
+# fetching
 def crawl_sites(client: TavilyClient) -> dict[str, str]:
     pages: dict[str, str] = {}
     for src in CRAWL_SOURCES:
@@ -62,7 +61,7 @@ def discover_urls(client: TavilyClient) -> set[str]:
 
 def extract_urls(client: TavilyClient, urls: list[str]) -> dict[str, str]:
     pages: dict[str, str] = {}
-    for i in range(0, len(urls), 20):  # Tavily extract accepts up to 20 URLs per call
+    for i in range(0, len(urls), 20):  # Tavily takes 20 URLs max per call
         batch = urls[i:i + 20]
         try:
             res = client.extract(urls=batch, extract_depth="basic", format="markdown")
@@ -87,7 +86,7 @@ def fetch_pages(extra_urls: list[str]) -> dict[str, str]:
     return pages
 
 
-# ----------------------------------------------------------------------------- caching
+# cache
 def cache_path() -> Path:
     return Path(get_settings().raw_dir) / "pages.jsonl"
 
@@ -109,13 +108,13 @@ def load_cache() -> dict[str, str]:
         return {r["url"]: r["content"] for r in map(json.loads, f)}
 
 
-# ----------------------------------------------------------------------------- cleaning / chunking
+# cleaning and chunking
 _IMG = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 
 
 def clean_markdown(text: str) -> str:
-    """Strip images/link targets and drop repeated lines (menus/footers repeat on every page)."""
+    """Remove images and link targets, and repeated lines (menus and footers)."""
     text = _IMG.sub("", text)
     text = _LINK.sub(r"\1", text)
     seen, out = set(), []
@@ -123,9 +122,9 @@ def clean_markdown(text: str) -> str:
         line = line.rstrip()
         key = line.strip().lower()
         if len(key) < 3:
-            out.append("")  # keep paragraph breaks only
+            out.append("")  # keep blank lines
             continue
-        if key in seen and len(key) < 80:  # short repeated line == navigation boilerplate
+        if key in seen and len(key) < 80:  # short repeated line = menu
             continue
         seen.add(key)
         out.append(line)
@@ -152,7 +151,7 @@ def chunk_pages(pages: dict[str, str]) -> list[Document]:
         title = page_title(url, text)
         for i, chunk in enumerate(splitter.split_text(text)):
             docs.append(Document(
-                page_content=f"{title}\n\n{chunk}",  # title prefix improves retrieval of short chunks
+                page_content=f"{title}\n\n{chunk}",  # the title helps find short chunks
                 metadata={"url": url, "title": title, "chunk": i, "lang": "en" if "/en" in url or "getnet.net" in url else "pt",
                           "is_pdf": url.lower().endswith(".pdf")},
             ))
@@ -163,7 +162,7 @@ def doc_id(d: Document) -> str:
     return hashlib.sha1(f"{d.metadata['url']}#{d.metadata['chunk']}".encode()).hexdigest()
 
 
-# ----------------------------------------------------------------------------- indexing
+# indexing
 def index_documents(docs: list[Document], reset: bool = False) -> int:
     from app.rag.store import get_vector_store
 
@@ -181,7 +180,7 @@ def index_documents(docs: list[Document], reset: bool = False) -> int:
         batch = docs[i:i + bs]
         for attempt in range(1, 6):
             try:
-                store.add_documents(batch, ids=[doc_id(d) for d in batch])  # same ids => upsert, idempotent
+                store.add_documents(batch, ids=[doc_id(d) for d in batch])  # same ids = upsert
                 break
             except Exception as e:
                 wait = 30 * attempt
@@ -192,7 +191,7 @@ def index_documents(docs: list[Document], reset: bool = False) -> int:
         total += len(batch)
         log.info("Indexed %d/%d chunks", total, len(docs))
         if s.ingest_sleep_seconds and total < len(docs):
-            time.sleep(s.ingest_sleep_seconds)  # stay under embedding-provider rate limits
+            time.sleep(s.ingest_sleep_seconds)  # avoid Voyage rate limits
     return total
 
 
