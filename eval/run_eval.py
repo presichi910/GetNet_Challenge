@@ -65,8 +65,8 @@ def is_provider_error(text: str | None) -> bool:
     return bool(text) and bool(PROVIDER_ERROR_RE.search(text))
 
 
-def provider_error_in(state: dict) -> str | None:
-    """Where the provider failed in this run ("router: RateLimitError: ..."), or None.
+def provider_errors_in(state: dict) -> list[tuple[str, str]]:
+    """[(where, full error text)] for every provider failure in this run.
 
     The router and the synthesizer swallow their exceptions and use a fallback, so they leave
     the cause in `router_error` / `synth_error`. Agents leave it in their `error`."""
@@ -78,6 +78,13 @@ def provider_error_in(state: dict) -> str | None:
             found.append((agent, out["error"]))
     if is_provider_error(state.get("synth_error")):
         found.append(("synthesizer", state["synth_error"]))
+    return found
+
+
+def provider_error_in(state: dict) -> str | None:
+    """Short text for the report ("router: RateLimitError: ..."), or None. Display only: it is
+    cut, so never classify with it (the 'tokens per day' part may be cut off)."""
+    found = provider_errors_in(state)
     if not found:
         return None
     return "; ".join(f"{where}: {' '.join(str(msg).split())[:160]}" for where, msg in found)
@@ -116,7 +123,8 @@ def run_case(service, case: dict, thread_base: str, retries: int, sleep) -> tupl
             state, latency = service.run_raw(case["message"], case["user_id"], thread_id=f"{thread_base}-{attempt}")
         except Exception as e:  # noqa: BLE001
             exc = f"{type(e).__name__}: {e}"
-        problem = exc or provider_error_in(state)
+        # classify with the FULL text: a daily quota must not be mistaken for a per-minute limit
+        problem = exc or " ".join(msg for _, msg in provider_errors_in(state or {}))
         if is_provider_error(problem) and not is_daily_limit(problem) and attempt < retries:
             wait = retry_wait(problem)
             print(f"   rate limited, waiting {wait:.0f}s and retrying ({attempt + 1}/{retries})")

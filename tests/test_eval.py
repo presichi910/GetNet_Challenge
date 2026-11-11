@@ -262,3 +262,32 @@ def test_the_report_says_which_models_ran_and_a_partial_run_keeps_latest_md(tmp_
 
     run_eval.write_report([row], summarize([row]), models)  # a full clean run updates it
     assert "k-model" in latest.read_text(encoding="utf-8")
+
+
+# the real Groq message is long: "tokens per day" sits after the 160 characters the report shows
+REAL_DAILY = ("RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model "
+              "`openai/gpt-oss-20b` in organization `org_01abcdefghijklmnopqrstuvwx` service tier `on_demand` on "
+              "tokens per day (TPD): Limit 200000, Used 199976, Requested 1232. Please try again in 8m41.856s. "
+              "Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', "
+              "'type': 'tokens', 'code': 'rate_limit_exceeded'}}")
+
+
+def test_a_real_daily_quota_message_is_not_retried_even_though_the_report_cuts_it():
+    from eval.run_eval import evaluate, provider_error_in
+
+    state = good_state(router_error=REAL_DAILY, plan=["knowledge"])
+    assert "tokens per day" not in provider_error_in(state)  # the display text is cut before it
+    waits = []
+    svc = FakeService(state, good_state())
+    rows = evaluate([CASE], svc, None, pause=0, retries=3, sleep=waits.append)
+    assert waits == [] and rows[0].get("provider_error") and len(svc.outcomes) == 1
+
+
+def test_a_real_per_minute_message_is_still_retried():
+    from eval.run_eval import evaluate
+
+    minute = REAL_DAILY.replace("tokens per day (TPD)", "tokens per minute (TPM)").replace("8m41.856s", "9.5s")
+    waits = []
+    rows = evaluate([CASE], FakeService(good_state(router_error=minute), good_state()), None, pause=0,
+                    retries=2, sleep=waits.append)
+    assert waits == [pytest.approx(11.5)] and not rows[0].get("provider_error")
