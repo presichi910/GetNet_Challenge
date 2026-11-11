@@ -53,3 +53,129 @@ def test_handoff_ok_and_summary_metrics():
             {"routing_ok": True, "tools_ok": True, "latency_ms": 1, "handoff": "x", "handoff_ok": None}]
     s = summarize(rows)
     assert s["handoff_accuracy"] == 0.5 and round(s["handoff_rate"], 2) == 0.67
+
+
+# ---------------- provider errors are not verdicts ----------------
+
+class RateLimitError(Exception):  # same class name as the Groq SDK one, which is what we match on
+    pass
+
+
+QUOTA = "RateLimitError: Error code: 429 - Rate limit reached ... tokens per day (TPD): Limit 200000, Used 199483"
+CASE = {"id": "c", "user_id": "u", "message": "hi", "expected_agents": ["support"]}
+
+
+def good_state(**extra):
+    out = {"plan": ["support"], "final_answer": "a", "router_error": "", "synth_error": "",
+           "agent_outputs": {"support": {"answer": "a", "error": None, "tool_calls": [], "contexts": []}}}
+    out.update(extra)
+    return out
+
+
+class FakeService:
+    def __init__(self, *outcomes):
+        self.outcomes = list(outcomes)
+
+    def run_raw(self, message, user_id, thread_id=None):
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome, 5
+
+
+class CountingJudge:
+    def __init__(self):
+        self.calls = 0
+
+    def score(self, *a, **k):
+        self.calls += 1
+        return {"relevance": 5, "groundedness": 5, "completeness": 5, "tone": 5, "verdict": "pass", "reason": ""}
+
+
+@pytest.mark.parametrize("text, expected", [
+    (QUOTA, True),
+    ("APIConnectionError: Connection error.", True),
+    ("InternalServerError: Error code: 503 - overloaded", True),
+    ("APITimeoutError: Request timed out.", True),
+    ("BadRequestError: Error code: 400 - tool_use_failed", False),  # the model's fault, counts
+    ("empty_answer", False),
+    ("ValueError: no JSON in judge output", False),
+    ("", False),
+    (None, False),
+])
+def test_is_provider_error(text, expected):
+    from eval.run_eval import is_provider_error
+
+    assert is_provider_error(text) is expected
+
+
+@pytest.mark.parametrize("state, where", [
+    (good_state(router_error=QUOTA, plan=["knowledge"]), "router"),  # quota -> router fell back to knowledge
+    (good_state(agent_outputs={"support": {"answer": "", "error": QUOTA, "tool_calls": [], "contexts": []}}), "support"),
+    (good_state(synth_error=QUOTA), "synthesizer"),
+])
+def test_a_provider_error_in_any_node_marks_the_case_as_error_and_skips_the_judge(state, where):
+    from eval.run_eval import evaluate
+
+    judge = CountingJudge()
+    rows = evaluate([CASE], FakeService(state), judge, pause=0)
+    assert rows[0]["provider_error"].startswith(where) and "routing_ok" not in rows[0]
+    assert judge.calls == 0  # no quota spent judging something that did not really run
+
+
+def test_an_exception_from_the_provider_while_running_is_an_error_but_a_bug_is_a_failure():
+    from eval.run_eval import evaluate
+
+    rows = evaluate([CASE, CASE], FakeService(RateLimitError("Error code: 429"), ValueError("bug")), None, pause=0)
+    assert rows[0].get("provider_error") and rows[0]["provider_error"].startswith("run: RateLimitError")
+    assert not rows[1].get("provider_error") and rows[1]["routing_ok"] is False  # real failure, still counted
+
+
+def test_provider_errors_do_not_count_in_any_metric():
+    from eval.run_eval import evaluate
+
+    judge = CountingJudge()
+    states = [good_state(), good_state(router_error=QUOTA), good_state()]
+    rows = evaluate([CASE] * 3, FakeService(*states), judge, pause=0)
+    s = summarize(rows)
+    assert s["cases"] == 2 and s["provider_errors"] == 1
+    assert s["routing_accuracy"] == 1.0 and s["tool_use_accuracy"] == 1.0 and s["judge_pass_rate"] == 1.0
+    assert s["degraded_rate"] == 0 and judge.calls == 2
+
+
+def test_a_run_made_only_of_provider_errors_reports_no_metrics():
+    s = summarize([{"id": "a", "provider_error": "router: x", "latency_ms": 0},
+                   {"id": "b", "provider_error": "run: y", "latency_ms": 0}])
+    assert s == {"cases": 0, "provider_errors": 2}  # not "0% routing accuracy"
+
+
+def test_judge_errors_are_counted_apart_and_not_averaged():
+    bad = {"relevance": 0, "groundedness": 0, "completeness": 0, "tone": 0, "verdict": "error", "reason": "x"}
+    ok = {"relevance": 5, "groundedness": 5, "completeness": 5, "tone": 5, "verdict": "pass", "reason": ""}
+    s = summarize([{"routing_ok": True, "tools_ok": True, "latency_ms": 1, "judge": bad},
+                   {"routing_ok": True, "tools_ok": True, "latency_ms": 1, "judge": ok}])
+    assert s["judge_errors"] == 1 and s["avg_relevance"] == 5 and s["judge_pass_rate"] == 1.0
+
+
+def test_report_lists_errors_and_an_incomplete_run_keeps_latest_md(tmp_path, monkeypatch):
+    import eval.run_eval as run_eval
+
+    monkeypatch.setattr(run_eval, "ROOT", tmp_path)
+    (tmp_path / "reports").mkdir()
+    latest = tmp_path / "reports" / "latest.md"
+    latest.write_text("PREVIOUS FULL REPORT", encoding="utf-8")
+
+    ok_row = {"id": "a", "message": "m", "routing_ok": True, "tools_ok": True, "latency_ms": 5, "plan": []}
+    err_row = {"id": "b", "message": "m", "provider_error": "router: RateLimitError: 429", "latency_ms": 0}
+
+    summary = summarize([ok_row, err_row])
+    text = run_eval.render_report([ok_row, err_row], summary, "stamp")
+    assert "| b | - |" in text and "| error |" in text and "Provider errors" in text
+    assert "excluded from every metric" in text
+
+    run_eval.write_report([ok_row, err_row], summary)
+    assert latest.read_text(encoding="utf-8") == "PREVIOUS FULL REPORT"  # not overwritten
+    assert len(list((tmp_path / "reports").glob("*.md"))) == 2  # but the dated report was written
+
+    run_eval.write_report([ok_row], summarize([ok_row]))
+    assert "PREVIOUS" not in latest.read_text(encoding="utf-8")  # a clean run does update it

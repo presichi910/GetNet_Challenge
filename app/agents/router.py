@@ -42,6 +42,7 @@ def make_router_node(llm=None):
             structured = (llm or get_llm(model=get_settings().light_model)).with_structured_output(RoutingDecision, method="function_calling")
 
         history = recent_dialogue(state["messages"], get_settings().history_window)
+        router_error = ""
         try:
             decision: RoutingDecision = structured.invoke([SystemMessage(content=ROUTER_PROMPT), *history])
             plan = normalize_plan(decision.agents)
@@ -49,13 +50,15 @@ def make_router_node(llm=None):
             wants_human = decision.wants_human
             if wants_human:
                 plan = []  # straight to a person, skip the agents
-        except Exception:
+        except Exception as e:  # noqa: BLE001
             log.exception("Router failed; falling back to default plan")
             plan, reasoning, language, wants_human = list(DEFAULT_PLAN), "router_error_fallback", "English", False
+            router_error = f"{type(e).__name__}: {e}"[:500]  # so the eval can tell a provider outage from a bad plan
 
         log.info("router plan=%s language=%s reason=%s", plan, language, reasoning)
         # reset the per-turn fields, the checkpointer keeps state between turns
         return {"plan": plan, "step": 0, "language": language, "routing_reasoning": reasoning,
-                "agent_outputs": {}, "final_answer": "", "wants_human": wants_human, "handoff": None}
+                "agent_outputs": {}, "final_answer": "", "wants_human": wants_human, "handoff": None,
+                "router_error": router_error, "synth_error": ""}
 
     return router_node

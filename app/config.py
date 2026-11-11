@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     voyage_api_key: str = ""
 
+    # auth: HS256 JWT. The secret has no default, the app refuses to start without a real one.
+    jwt_secret: str = ""
+    jwt_issuer: str = "getnet-support-demo"
+    jwt_audience: str = "getnet-support-api"
+
     # models
     llm_model: str = "openai/gpt-oss-120b"
     # smaller model for router, support and synthesizer (Groq limits are per model)

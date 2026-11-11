@@ -6,12 +6,17 @@
 
 Per case: routing check, tool check, handoff check, and the LLM judge (relevance,
 groundedness, completeness, tone, 1-5). Also latency p50/p95 and degraded rate.
+
+A case that hit a PROVIDER error (rate limit, exhausted quota, connection/5xx) says nothing
+about the system's quality, so it is marked `error` and left out of every metric. A run with
+provider errors does not overwrite eval/reports/latest.md.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import logging
+import re
 import statistics
 import time
 import uuid
@@ -43,6 +48,41 @@ def handoff_ok(case: dict, reason: str | None) -> bool | None:
     return None if expected is None else (reason is not None) == expected
 
 
+# Errors that come from the provider (quota, rate limit, outage), not from our agents.
+# `BadRequestError ... tool_use_failed` (the model sent a broken tool call) is NOT here: that is
+# a model failure and it counts against the system.
+PROVIDER_ERROR_RE = re.compile(
+    r"RateLimitError|APIConnectionError|APITimeoutError|InternalServerError|ServiceUnavailable|"
+    r"ConnectError|ReadTimeout|Error code: (?:429|5\d\d)\b|rate limit|tokens per (?:day|minute)|"
+    r"quota|overloaded|connection (?:error|reset|refused)", re.I)
+
+
+def is_provider_error(text: str | None) -> bool:
+    return bool(text) and bool(PROVIDER_ERROR_RE.search(text))
+
+
+def provider_error_in(state: dict) -> str | None:
+    """Where the provider failed in this run ("router: RateLimitError: ..."), or None.
+
+    The router and the synthesizer swallow their exceptions and use a fallback, so they leave
+    the cause in `router_error` / `synth_error`. Agents leave it in their `error`."""
+    found = []
+    if is_provider_error(state.get("router_error")):
+        found.append(("router", state["router_error"]))
+    for agent, out in state.get("agent_outputs", {}).items():
+        if is_provider_error(out.get("error")):
+            found.append((agent, out["error"]))
+    if is_provider_error(state.get("synth_error")):
+        found.append(("synthesizer", state["synth_error"]))
+    if not found:
+        return None
+    return "; ".join(f"{where}: {' '.join(str(msg).split())[:160]}" for where, msg in found)
+
+
+def error_row(case: dict, reason: str, latency_ms: int = 0) -> dict:
+    return {"id": case["id"], "message": case["message"], "provider_error": reason, "latency_ms": latency_ms}
+
+
 def pct(values: list[float], p: float) -> float:
     if not values:
         return 0.0
@@ -59,7 +99,16 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float) -> l
             # new thread per case, no shared memory
             state, latency = service.run_raw(c["message"], c["user_id"], thread_id=f"eval-{run_id}-{c['id']}")
         except Exception as e:  # noqa: BLE001
-            rows.append({"id": c["id"], "error": str(e), "routing_ok": False, "tools_ok": False, "latency_ms": 0})
+            msg = f"{type(e).__name__}: {e}"
+            if is_provider_error(msg):
+                rows.append(error_row(c, f"run: {' '.join(msg.split())[:200]}"))
+            else:
+                rows.append({"id": c["id"], "error": msg, "routing_ok": False, "tools_ok": False, "latency_ms": 0})
+            continue
+        perr = provider_error_in(state)
+        if perr:  # not a verdict on the system: mark it, skip the judge (saves quota) and move on
+            print(f"   provider error, case excluded: {perr}")
+            rows.append(error_row(c, perr, latency))
             continue
         outs = state.get("agent_outputs", {})
         called = [tc["name"] for o in outs.values() for tc in o.get("tool_calls", [])]
@@ -84,11 +133,17 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float) -> l
 
 
 def summarize(rows: list[dict]) -> dict:
+    """Metrics over the cases that really ran. Provider errors are counted apart, never averaged in."""
+    provider_errors = sum(1 for r in rows if r.get("provider_error"))
+    rows = [r for r in rows if not r.get("provider_error")]
     n = len(rows)
+    if not n:
+        return {"cases": 0, "provider_errors": provider_errors}
     judged = [r["judge"] for r in rows if r.get("judge") and r["judge"]["verdict"] != "error"]
     lat = [r["latency_ms"] for r in rows if r["latency_ms"]]
     s = {
         "cases": n,
+        "provider_errors": provider_errors,
         "routing_accuracy": sum(r["routing_ok"] for r in rows) / n if n else 0,
         "tool_use_accuracy": sum(r["tools_ok"] for r in rows) / n if n else 0,
         "degraded_rate": sum(bool(r.get("degraded")) for r in rows) / n if n else 0,
@@ -98,6 +153,9 @@ def summarize(rows: list[dict]) -> dict:
     if checked:
         s["handoff_accuracy"] = sum(checked) / len(checked)  # only cases with an expectation
     s["handoff_rate"] = sum(bool(r.get("handoff")) for r in rows) / n if n else 0
+    judge_errors = sum(1 for r in rows if r.get("judge", {}).get("verdict") == "error")
+    if judge_errors:
+        s["judge_errors"] = judge_errors  # judge failed (not scored), the case still counts for routing/tools
     if judged:
         for k in SCORE_KEYS:
             s[f"avg_{k}"] = round(statistics.mean(j[k] for j in judged), 2)
@@ -116,6 +174,9 @@ def render_report(rows: list[dict], summary: dict, stamp: str) -> str:
     """Markdown report. Rates and judge scores are shown as percentages."""
     lines = ["# Evaluation report", "", f"_Generated {stamp}_", "", "## Summary", "",
              f"_Judge scores are shown as a percentage of the maximum ({MAX_SCORE})._", ""]
+    if summary.get("provider_errors"):
+        lines += [f"**{summary['provider_errors']} case(s) hit a provider error (rate limit / quota / outage) "
+                  "and are excluded from every metric below.**", ""]
     for k, v in summary.items():
         if k == "cases":
             continue
@@ -127,12 +188,19 @@ def render_report(rows: list[dict], summary: dict, stamp: str) -> str:
             lines.append(f"- **{k}**: {v}")
     lines += ["", "## Cases", "", "| id | route | tools | handoff | rel | grounded | compl | tone | verdict | ms |", "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
+        if r.get("provider_error"):
+            lines.append(f"| {r['id']} | - | - | - | - | - | - | - | error | {r['latency_ms']} |")
+            continue
         j = r.get("judge", {})
         h_ok = {True: "OK", False: "FAIL", None: "-"}[r.get("handoff_ok")]
         lines.append(f"| {r['id']} | {'OK' if r['routing_ok'] else 'FAIL'} {r.get('plan', '')} | {'OK' if r['tools_ok'] else 'FAIL'} "
                      f"| {h_ok} {r.get('handoff') or ''} | {_score_pct(j.get('relevance'))} | {_score_pct(j.get('groundedness'))} "
                      f"| {_score_pct(j.get('completeness'))} | {_score_pct(j.get('tone'))} "
                      f"| {j.get('verdict', '-')} | {r['latency_ms']} |")
+    errored = [r for r in rows if r.get("provider_error")]
+    if errored:
+        lines += ["", "## Provider errors (excluded from the metrics, re-run these cases)", ""]
+        lines += [f"- **{r['id']}**: {r['provider_error']}" for r in errored]
     failures = [r for r in rows if r.get("judge", {}).get("verdict") == "fail"]
     if failures:
         lines += ["", "## Judge failures", ""]
@@ -148,7 +216,8 @@ def write_report(rows: list[dict], summary: dict) -> Path:
     text = render_report(rows, summary, stamp)
     path = out / f"{stamp}.md"
     path.write_text(text, encoding="utf-8")
-    (out / "latest.md").write_text(text, encoding="utf-8")
+    if not summary.get("provider_errors"):  # an incomplete run must not replace the versioned evidence
+        (out / "latest.md").write_text(text, encoding="utf-8")
     return path
 
 
@@ -170,6 +239,11 @@ def main() -> None:
     print("\n=== SUMMARY ===")
     print(json.dumps(summary, indent=2))
     print(f"\nReport: {path}")
+    errored = [r["id"] for r in rows if r.get("provider_error")]
+    if errored:
+        print(f"\nWARNING: {len(errored)} case(s) hit a provider error (quota / rate limit / outage) and were "
+              "left out of the metrics. latest.md was NOT updated.\n"
+              f"Re-run them when the provider recovers: python -m eval.run_eval --only {' '.join(errored)}")
 
 
 if __name__ == "__main__":

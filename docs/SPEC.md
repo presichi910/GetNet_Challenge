@@ -9,7 +9,7 @@ HTTP service that answers Getnet customer messages by orchestrating specialised 
 
 | ID | Requirement | Acceptance check |
 |---|---|---|
-| F1 | `POST /chat` accepts `{message, user_id}` and returns JSON with the answer | `tests/test_api.py` |
+| F1 | `POST /chat` accepts `{message}` (optional `user_id`, must match the token; optional `conversation_id`) with a Bearer JWT and returns JSON with the answer | `tests/test_api.py` |
 | F2 | Invalid payloads are rejected with 422; internal errors never leak details | `tests/test_api.py` |
 | F3 | A Router agent outputs an ordered plan of specialists (possibly empty) and the user's language | `tests/test_agents.py`, eval routing accuracy |
 | F4 | Plan execution is sequential; later agents can read earlier agents' findings | `tests/test_graph.py` |
@@ -25,6 +25,13 @@ HTTP service that answers Getnet customer messages by orchestrating specialised 
 | F14 | A handoff opens a ticket (if the customer exists), appends a context-rich record to an operator queue, and tells the customer in their language with a reference id | `test_handoff_creates_ticket_queue_record_and_notice`, `test_notice_is_localised_...` |
 | F15 | The customer never sees content from an agent that flagged itself unresolved; it goes to the operator | `test_unresolved_findings_go_to_the_human_not_to_the_customer` |
 | F16 | Normal questions are NOT escalated (handoff false-positive rate is measured) | eval `expect_handoff` on q01-q10, x01, x02, x04 |
+| F17 | `/chat` requires a valid JWT: HS256 only, signature, `exp`, `iss`, `aud`, `sub` checked; anything else is 401 with a generic message. `/health` stays public | `tests/test_auth.py` |
+| F18 | The `chat` scope is required (403 otherwise) | `test_missing_chat_scope_is_403` |
+| F19 | The customer is the token `sub`. A body `user_id` of another customer is 403 and never reaches the orchestrator; the LLM never chooses the id (tools are bound to it) | `test_body_user_id_of_another_customer_is_403`, `test_end_to_end_tools_only_return_the_token_users_data`, `test_support_prompt_uses_the_authenticated_id_not_text_from_the_user` |
+| F20 | Memory thread is `<sub>:<conversation_id>`: nobody can address another customer's conversation | `test_two_users_same_conversation_id_get_different_memory_threads`, `test_api_derives_the_memory_thread_from_the_token` |
+| F21 | The app does not start with an empty, short or placeholder `JWT_SECRET` | `test_app_refuses_to_start_with_a_weak_secret` |
+| F22 | No tool exposes a parameter that selects a user (checked on the schema of every tool, found automatically) | `tests/test_tool_schemas.py` |
+| F23 | The eval marks provider errors (rate limit, quota, outage) as `error`: excluded from every metric, judge skipped, `latest.md` not overwritten | `tests/test_eval.py` (`test_provider_errors_do_not_count_in_any_metric`, ...) |
 
 ## 3. Non-functional requirements
 
@@ -60,12 +67,13 @@ Routing rules:
 Synthesizer: 0 outputs -> direct reply; 1 -> passthrough; 2+ -> merge; all failed -> static fallback.
 
 ## 5. Out of scope (for now)
-Guardrail classifiers, tracing backend, dashboards/alerts, authentication, real customer backend, an operator UI or a real notifier (Slack/Teams/helpdesk) for the handoff queue.
+Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider (RS256/JWKS, refresh, revocation), rate limiting, real customer backend, an operator UI or a real notifier (Slack/Teams/helpdesk) for the handoff queue.
 
 ## 6. Open decisions (resolved with the product owner)
 - Routing style: multi-step plan (chosen) vs single-agent vs supervisor loop.
 - Customer data: mock JSON in-process (chosen).
-- Memory: LangGraph `MemorySaver`, `thread_id = user_id` (chosen).
+- Memory: LangGraph `MemorySaver`, `thread_id = "<user_id>:<conversation_id>"` with `user_id` taken from the JWT (chosen).
+- Identity: JWT HS256 with a shared secret for the demo (chosen); the id comes only from `sub`. Body `user_id` kept optional for compatibility with the original contract.
 - Evaluation: offline dataset + LLM judge (chosen).
 - Handoff action: ticket + local operator queue behind a pluggable notifier (chosen); no webhook yet.
 - Handoff triggers: explicit user request, technical failure, agent-reported low confidence (chosen); user frustration detection left out as too subjective to evaluate.

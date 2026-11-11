@@ -12,6 +12,7 @@ RUN pip install -r requirements.txt
 
 COPY app ./app
 COPY eval ./eval
+COPY scripts ./scripts
 
 # Chroma, crawl cache and tickets live in a mounted volume
 RUN mkdir -p /app/data

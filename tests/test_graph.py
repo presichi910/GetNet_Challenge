@@ -78,8 +78,8 @@ def test_memory_is_per_user_and_per_turn_state_resets():
     svc.handle("first", "alice")
     svc.handle("second", "alice")
     svc.handle("other", "bob")
-    alice = svc.graph.get_state({"configurable": {"thread_id": "alice"}}).values["messages"]
-    bob = svc.graph.get_state({"configurable": {"thread_id": "bob"}}).values["messages"]
+    alice = svc.graph.get_state({"configurable": {"thread_id": "alice:default"}}).values["messages"]
+    bob = svc.graph.get_state({"configurable": {"thread_id": "bob:default"}}).values["messages"]
     assert [m.content for m in alice if isinstance(m, HumanMessage)] == ["first", "second"]
     assert [m.content for m in bob if isinstance(m, HumanMessage)] == ["other"]
     # turn 1 outputs must not leak into turn 2
@@ -99,3 +99,16 @@ def test_degraded_flag_when_specialist_fails():
     r = ChatService(build_graph(router, failing, support, synth, handoff)).handle("q", "u1")
     assert r.degraded is True
     assert r.handoff and calls[-1] == "handoff"  # all agents failed -> human
+
+
+def test_conversations_of_the_same_user_are_separate_threads():
+    svc, _ = run(["knowledge"])
+    svc.handle("a1", "alice", conversation_id="c1")
+    svc.handle("a2", "alice", conversation_id="c2")
+    svc.handle("a3", "alice", conversation_id="c1")
+
+    def human(thread):
+        msgs = svc.graph.get_state({"configurable": {"thread_id": thread}}).values["messages"]
+        return [m.content for m in msgs if isinstance(m, HumanMessage)]
+
+    assert human("alice:c1") == ["a1", "a3"] and human("alice:c2") == ["a2"]

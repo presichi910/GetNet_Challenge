@@ -45,7 +45,8 @@ def build_graph(router: Callable, knowledge: Callable, support: Callable, synthe
     g.add_edge("synthesizer", END)
     g.add_edge("handoff", END)
 
-    # thread_id = user_id, so each customer has their own memory
+    # thread_id = "<user_id>:<conversation_id>" (see service.thread_id_for), so each customer
+    # has their own memory and nobody can reach another customer's thread
     return g.compile(checkpointer=checkpointer or MemorySaver())
 
 

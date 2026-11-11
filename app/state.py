@@ -20,9 +20,9 @@ class AgentResult(TypedDict, total=False):
 
 
 class GraphState(TypedDict, total=False):
-    # conversation memory (one per user_id)
+    # conversation memory (one thread per "<user_id>:<conversation_id>")
     messages: Annotated[list[AnyMessage], add_messages]
-    user_id: str
+    user_id: str  # the authenticated user (JWT sub), set by the API, never by the LLM
 
     # per-turn fields, the router resets them every turn
     plan: list[str]
@@ -31,5 +31,7 @@ class GraphState(TypedDict, total=False):
     routing_reasoning: str
     agent_outputs: dict[str, AgentResult]
     final_answer: str
+    router_error: str  # why the router fell back to the default plan ("" if it didn't), for the eval
+    synth_error: str  # why the synthesizer used its fallback ("" if it didn't), for the eval
     wants_human: bool  # user asked for a person
     handoff: dict | None  # set by the handoff node

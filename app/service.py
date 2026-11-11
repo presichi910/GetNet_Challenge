@@ -7,9 +7,15 @@ import uuid
 
 from langchain_core.messages import HumanMessage
 
-from app.schemas import ChatResponse, HandoffInfo, Routing, Source, ToolCall
+from app.schemas import DEFAULT_CONVERSATION, ChatResponse, HandoffInfo, Routing, Source, ToolCall
 
 log = logging.getLogger("chat")
+
+
+def thread_id_for(user_id: str, conversation_id: str | None = None) -> str:
+    """Memory key. It always starts with the authenticated user, so one user can never
+    address another user's conversation, whatever conversation_id they send."""
+    return f"{user_id}:{conversation_id or DEFAULT_CONVERSATION}"
 
 
 class ChatService:
@@ -21,13 +27,15 @@ class ChatService:
         t0 = time.perf_counter()
         state = self.graph.invoke(
             {"messages": [HumanMessage(content=message)], "user_id": user_id},
-            config={"configurable": {"thread_id": thread_id or user_id}, "recursion_limit": 25},
+            config={"configurable": {"thread_id": thread_id or thread_id_for(user_id)}, "recursion_limit": 25},
         )
         return state, int((time.perf_counter() - t0) * 1000)
 
-    def handle(self, message: str, user_id: str, thread_id: str | None = None) -> ChatResponse:
+    def handle(self, message: str, user_id: str, conversation_id: str | None = None) -> ChatResponse:
+        """`user_id` must be the authenticated user. The memory thread is derived from it here."""
         trace_id = uuid.uuid4().hex[:12]
-        state, latency_ms = self.run_raw(message, user_id, thread_id)
+        conversation_id = conversation_id or DEFAULT_CONVERSATION
+        state, latency_ms = self.run_raw(message, user_id, thread_id_for(user_id, conversation_id))
         outputs = state.get("agent_outputs", {})
 
         sources, seen = [], set()
@@ -42,6 +50,7 @@ class ChatService:
         resp = ChatResponse(
             response=state["final_answer"],
             user_id=user_id,
+            conversation_id=conversation_id,
             agents_used=list(outputs.keys()),
             routing=Routing(plan=state.get("plan", []), reasoning=state.get("routing_reasoning", ""),
                             language=state.get("language", "")),
@@ -53,7 +62,7 @@ class ChatService:
             trace_id=trace_id,
         )
         # one log line per request
-        log.info("trace=%s user=%s plan=%s used=%s tools=%s degraded=%s handoff=%s latency_ms=%d",
-                 trace_id, user_id, resp.routing.plan, resp.agents_used,
+        log.info("trace=%s user=%s conv=%s plan=%s used=%s tools=%s degraded=%s handoff=%s latency_ms=%d",
+                 trace_id, user_id, conversation_id, resp.routing.plan, resp.agents_used,
                  [t.name for t in tool_calls], resp.degraded, resp.handoff.reason if resp.handoff else None, latency_ms)
         return resp

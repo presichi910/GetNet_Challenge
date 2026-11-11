@@ -25,6 +25,7 @@ def make_synthesizer_node(llm=None):
         language = state.get("language", "English")
         outputs = state.get("agent_outputs", {})
         ok = {k: v for k, v in outputs.items() if v.get("answer") and not v.get("error")}
+        synth_error = ""
 
         try:
             if not state.get("plan"):
@@ -40,11 +41,12 @@ def make_synthesizer_node(llm=None):
                 answer = str(msg.content).strip()
             else:
                 answer = FALLBACK_MESSAGE
-        except Exception:
+        except Exception as e:  # noqa: BLE001
             log.exception("Synthesizer failed")
+            synth_error = f"{type(e).__name__}: {e}"[:500]
             # use whatever an agent produced instead of failing
             answer = next((v["answer"] for v in ok.values()), FALLBACK_MESSAGE)
 
-        return {"final_answer": answer, "messages": [AIMessage(content=answer)]}
+        return {"final_answer": answer, "messages": [AIMessage(content=answer)], "synth_error": synth_error}
 
     return synthesizer_node

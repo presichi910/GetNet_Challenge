@@ -16,6 +16,8 @@ def make_support_node(llm=None, repo: CustomerRepository | None = None):
     def support_node(state: dict) -> dict:
         outputs = state.get("agent_outputs", {})
         user_id = state["user_id"]
+        # user_id is the authenticated id (JWT sub) from the state, never text from the user. The
+        # prompt shows it so the model can tell "my data" from "someone else's" (see x04).
         prompt = SUPPORT_PROMPT.format(user_id=user_id, language=state.get("language", "English"),
                                        prior_context=format_prior_context(outputs))
         tools = [*make_support_tools(user_id, repository), escalate_to_human]  # only for this user
