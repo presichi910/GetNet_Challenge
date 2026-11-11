@@ -1,3 +1,11 @@
+# One model per role. Values come from the shell or .env, these are the defaults.
+# Override for a single run: LIGHT_MODEL=openai/gpt-oss-120b docker compose run --rm eval
+x-models: &models
+  LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-120b}      # knowledge agent
+  LIGHT_MODEL: ${LIGHT_MODEL:-openai/gpt-oss-20b}   # router, support, synthesizer
+  JUDGE_MODEL: ${JUDGE_MODEL:-qwen/qwen3.8-27b}     # eval judge (different family than the agents)
+  REASONING_EFFORT: ${REASONING_EFFORT:-low}
+
 services:
   api:
     build: .
@@ -5,6 +13,7 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment: *models
     volumes:
       - ./data:/app/data   # keeps the data between restarts
     restart: unless-stopped
@@ -24,6 +33,7 @@ services:
     image: getnet-agents:latest
     profiles: ["tools"]
     env_file: .env
+    environment: *models
     volumes:
       - ./data:/app/data
       - ./eval/reports:/app/eval/reports
