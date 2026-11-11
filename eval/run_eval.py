@@ -3,6 +3,10 @@
     python -m eval.run_eval                 # all cases
     python -m eval.run_eval --only q05 x01  # only these ids (prefix)
     python -m eval.run_eval --no-judge      # skip the LLM judge
+    python -m eval.run_eval --retries 3     # wait out per-minute rate limits (default 2)
+
+Models per role come from LLM_MODEL (knowledge), LIGHT_MODEL (router, support, synthesizer) and
+JUDGE_MODEL, and the report says which ones ran. A partial run (--only) never overwrites latest.md.
 
 Per case: routing check, tool check, handoff check, and the LLM judge (relevance,
 groundedness, completeness, tone, 1-5). Also latency p50/p95 and degraded rate.
@@ -79,6 +83,19 @@ def provider_error_in(state: dict) -> str | None:
     return "; ".join(f"{where}: {' '.join(str(msg).split())[:160]}" for where, msg in found)
 
 
+def is_daily_limit(text: str | None) -> bool:
+    """A daily quota does not come back by waiting a few seconds, so it is never retried."""
+    return bool(text) and bool(re.search(r"per day|\(TPD\)|\(RPD\)", text, re.I))
+
+
+def retry_wait(text: str, floor: float = 5.0, cap: float = 70.0) -> float:
+    """Seconds to wait after a per-minute limit: the 'try again in 7.2s' hint plus a margin."""
+    ms = re.search(r"try again in ([\d.]+)ms", text or "")
+    m = re.search(r"try again in (?:(\d+)m(?!s))?(?:([\d.]+)s)?", text or "")
+    hinted = float(ms.group(1)) / 1000 if ms else (int(m.group(1) or 0) * 60 + float(m.group(2) or 0)) if m else 0.0
+    return min(cap, max(floor, hinted + 2))
+
+
 def error_row(case: dict, reason: str, latency_ms: int = 0) -> dict:
     return {"id": case["id"], "message": case["message"], "provider_error": reason, "latency_ms": latency_ms}
 
@@ -90,20 +107,38 @@ def pct(values: list[float], p: float) -> float:
     return s[min(len(s) - 1, int(round(p * (len(s) - 1))))]
 
 
-def evaluate(cases: list[dict], service, judge: Judge | None, pause: float) -> list[dict]:
+def run_case(service, case: dict, thread_base: str, retries: int, sleep) -> tuple[dict | None, int, str | None]:
+    """Run one case. A per-minute rate limit is waited out and retried (new thread each time);
+    anything else, including a daily quota, is returned as it is. -> (state, latency_ms, exception)"""
+    for attempt in range(retries + 1):
+        state, latency, exc = None, 0, None
+        try:
+            state, latency = service.run_raw(case["message"], case["user_id"], thread_id=f"{thread_base}-{attempt}")
+        except Exception as e:  # noqa: BLE001
+            exc = f"{type(e).__name__}: {e}"
+        problem = exc or provider_error_in(state)
+        if is_provider_error(problem) and not is_daily_limit(problem) and attempt < retries:
+            wait = retry_wait(problem)
+            print(f"   rate limited, waiting {wait:.0f}s and retrying ({attempt + 1}/{retries})")
+            sleep(wait)
+            continue
+        return state, latency, exc
+    raise AssertionError("unreachable")
+
+
+def evaluate(cases: list[dict], service, judge: Judge | None, pause: float,
+             retries: int = 0, sleep=time.sleep) -> list[dict]:
     run_id = uuid.uuid4().hex[:6]
     rows = []
     for c in cases:
         print(f"-> {c['id']}: {c['message']}")
-        try:
-            # new thread per case, no shared memory
-            state, latency = service.run_raw(c["message"], c["user_id"], thread_id=f"eval-{run_id}-{c['id']}")
-        except Exception as e:  # noqa: BLE001
-            msg = f"{type(e).__name__}: {e}"
-            if is_provider_error(msg):
-                rows.append(error_row(c, f"run: {' '.join(msg.split())[:200]}"))
+        # new thread per case, no shared memory
+        state, latency, exc = run_case(service, c, f"eval-{run_id}-{c['id']}", retries, sleep)
+        if exc is not None:
+            if is_provider_error(exc):
+                rows.append(error_row(c, f"run: {' '.join(exc.split())[:200]}"))
             else:
-                rows.append({"id": c["id"], "error": msg, "routing_ok": False, "tools_ok": False, "latency_ms": 0})
+                rows.append({"id": c["id"], "error": exc, "routing_ok": False, "tools_ok": False, "latency_ms": 0})
             continue
         perr = provider_error_in(state)
         if perr:  # not a verdict on the system: mark it, skip the judge (saves quota) and move on
@@ -170,10 +205,19 @@ def _score_pct(v) -> str:
     return "-" if v is None else f"{v / MAX_SCORE * 100:.0f}%"
 
 
-def render_report(rows: list[dict], summary: dict, stamp: str) -> str:
+def current_models() -> dict:
+    from app.config import get_settings
+
+    s = get_settings()
+    return {"knowledge": s.llm_model, "router / support / synthesizer": s.light_model, "judge": s.judge_model}
+
+
+def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | None = None) -> str:
     """Markdown report. Rates and judge scores are shown as percentages."""
-    lines = ["# Evaluation report", "", f"_Generated {stamp}_", "", "## Summary", "",
-             f"_Judge scores are shown as a percentage of the maximum ({MAX_SCORE})._", ""]
+    lines = ["# Evaluation report", "", f"_Generated {stamp}_", ""]
+    if models:
+        lines += ["_Models: " + ", ".join(f"{role} = `{name}`" for role, name in models.items()) + "_", ""]
+    lines += ["## Summary", "", f"_Judge scores are shown as a percentage of the maximum ({MAX_SCORE})._", ""]
     if summary.get("provider_errors"):
         lines += [f"**{summary['provider_errors']} case(s) hit a provider error (rate limit / quota / outage) "
                   "and are excluded from every metric below.**", ""]
@@ -208,15 +252,16 @@ def render_report(rows: list[dict], summary: dict, stamp: str) -> str:
     return "\n".join(lines)
 
 
-def write_report(rows: list[dict], summary: dict) -> Path:
+def write_report(rows: list[dict], summary: dict, models: dict | None = None, update_latest: bool = True) -> Path:
     out = ROOT / "reports"
     out.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     (out / f"{stamp}.json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
-    text = render_report(rows, summary, stamp)
+    text = render_report(rows, summary, stamp, models)
     path = out / f"{stamp}.md"
     path.write_text(text, encoding="utf-8")
-    if not summary.get("provider_errors"):  # an incomplete run must not replace the versioned evidence
+    # a partial run or one with provider errors must not replace the versioned full report
+    if update_latest and not summary.get("provider_errors"):
         (out / "latest.md").write_text(text, encoding="utf-8")
     return path
 
@@ -227,22 +272,26 @@ def main() -> None:
     ap.add_argument("--only", nargs="*", help="case id prefixes to run")
     ap.add_argument("--no-judge", action="store_true")
     ap.add_argument("--pause", type=float, default=1.0, help="seconds between cases")
+    ap.add_argument("--retries", type=int, default=2, help="times to wait out a per-minute rate limit per case")
     args = ap.parse_args()
 
     from app.graph import build_default_graph
     from app.service import ChatService
 
     cases = load_cases(args.only)
-    rows = evaluate(cases, ChatService(build_default_graph()), None if args.no_judge else Judge(), args.pause)
+    models = current_models()
+    print("Models:", ", ".join(f"{role}={name}" for role, name in models.items()))
+    rows = evaluate(cases, ChatService(build_default_graph()), None if args.no_judge else Judge(), args.pause,
+                    retries=args.retries)
     summary = summarize(rows)
-    path = write_report(rows, summary)
+    path = write_report(rows, summary, models, update_latest=not args.only)
     print("\n=== SUMMARY ===")
     print(json.dumps(summary, indent=2))
     print(f"\nReport: {path}")
     errored = [r["id"] for r in rows if r.get("provider_error")]
     if errored:
         print(f"\nWARNING: {len(errored)} case(s) hit a provider error (quota / rate limit / outage) and were "
-              "left out of the metrics. latest.md was NOT updated.\n"
+              "left out of the metrics.\n"
               f"Re-run them when the provider recovers: python -m eval.run_eval --only {' '.join(errored)}")
 
 

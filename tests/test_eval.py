@@ -179,3 +179,86 @@ def test_report_lists_errors_and_an_incomplete_run_keeps_latest_md(tmp_path, mon
 
     run_eval.write_report([ok_row], summarize([ok_row]))
     assert "PREVIOUS" not in latest.read_text(encoding="utf-8")  # a clean run does update it
+
+
+# ---------------- per-minute limits are waited out, daily quotas are not ----------------
+
+PER_MINUTE = ("RateLimitError: Error code: 429 - Rate limit reached for model `m` on tokens per minute (TPM): "
+              "Limit 8000, Used 6651, Requested 1592. Please try again in 1.8225s.")
+
+
+@pytest.mark.parametrize("hint, expected", [
+    ("Please try again in 1.8225s.", 5.0),        # short hint -> floor
+    ("Please try again in 30s", 32.0),            # hint + margin
+    ("Please try again in 1m5.2s", 67.2),
+    ("Please try again in 450ms", 5.0),           # milliseconds are not minutes
+    ("Please try again in 7m12.5s", 70.0),        # capped
+    ("no hint at all", 5.0),
+])
+def test_retry_wait(hint, expected):
+    from eval.run_eval import retry_wait
+
+    assert retry_wait(hint) == pytest.approx(expected)
+
+
+def test_daily_limit_detection():
+    from eval.run_eval import is_daily_limit
+
+    assert is_daily_limit(QUOTA) and not is_daily_limit(PER_MINUTE)
+
+
+def test_a_per_minute_limit_is_waited_out_and_the_case_counts_normally():
+    from eval.run_eval import evaluate
+
+    waits = []
+    svc = FakeService(good_state(router_error=PER_MINUTE), good_state())
+    rows = evaluate([CASE], svc, CountingJudge(), pause=0, retries=2, sleep=waits.append)
+    assert waits == [5.0]  # waited once, then it worked
+    assert not rows[0].get("provider_error") and rows[0]["routing_ok"] is True and svc.outcomes == []
+
+
+def test_a_per_minute_limit_that_never_clears_ends_as_an_error_not_a_failure():
+    from eval.run_eval import evaluate
+
+    waits = []
+    svc = FakeService(*[good_state(router_error=PER_MINUTE) for _ in range(3)])
+    rows = evaluate([CASE], svc, None, pause=0, retries=2, sleep=waits.append)
+    assert len(waits) == 2 and rows[0]["provider_error"].startswith("router:")
+    assert summarize(rows) == {"cases": 0, "provider_errors": 1}
+
+
+def test_a_daily_quota_is_not_retried():
+    from eval.run_eval import evaluate
+
+    waits = []
+    svc = FakeService(good_state(router_error=QUOTA), good_state())
+    rows = evaluate([CASE], svc, None, pause=0, retries=3, sleep=waits.append)
+    assert waits == [] and rows[0].get("provider_error") and len(svc.outcomes) == 1  # second outcome untouched
+
+
+def test_a_non_provider_exception_is_not_retried():
+    from eval.run_eval import evaluate
+
+    waits = []
+    svc = FakeService(ValueError("bug"), good_state())
+    rows = evaluate([CASE], svc, None, pause=0, retries=3, sleep=waits.append)
+    assert waits == [] and rows[0]["routing_ok"] is False
+
+
+def test_the_report_says_which_models_ran_and_a_partial_run_keeps_latest_md(tmp_path, monkeypatch):
+    import eval.run_eval as run_eval
+
+    monkeypatch.setattr(run_eval, "ROOT", tmp_path)
+    (tmp_path / "reports").mkdir()
+    latest = tmp_path / "reports" / "latest.md"
+    latest.write_text("FULL REPORT", encoding="utf-8")
+    row = {"id": "a", "message": "m", "routing_ok": True, "tools_ok": True, "latency_ms": 5, "plan": []}
+    models = {"knowledge": "k-model", "router / support / synthesizer": "l-model", "judge": "j-model"}
+
+    path = run_eval.write_report([row], summarize([row]), models, update_latest=False)  # e.g. --only
+    assert latest.read_text(encoding="utf-8") == "FULL REPORT"
+    text = path.read_text(encoding="utf-8")
+    assert "knowledge = `k-model`" in text and "router / support / synthesizer = `l-model`" in text and "judge = `j-model`" in text
+
+    run_eval.write_report([row], summarize([row]), models)  # a full clean run updates it
+    assert "k-model" in latest.read_text(encoding="utf-8")
