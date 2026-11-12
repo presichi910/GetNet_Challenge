@@ -4,6 +4,8 @@
     python -m eval.run_eval --only q05 x01  # only these ids (prefix)
     python -m eval.run_eval --no-judge      # skip the LLM judge
     python -m eval.run_eval --retries 3     # wait out per-minute rate limits (default 2)
+    python -m eval.run_eval --repeats 3     # 3 runs + eval/reports/REPEATS-<stamp>.md (spread, unstable cases)
+    python -m eval.run_eval --keep-latest   # never overwrite latest.md
 
 Models per role come from LLM_MODEL (knowledge), LIGHT_MODEL (router, synthesizer), SUPPORT_MODEL (support,
 default LIGHT_MODEL) and JUDGE_MODEL, and the report says which ones ran. A partial run (--only) never overwrites latest.md.
@@ -428,6 +430,27 @@ def write_report(rows: list[dict], summary: dict, models: dict | None = None, up
     return path
 
 
+def run_repeats(cases: list[dict], service, judge, repeats: int, pause: float, retries: int = 0,
+                models: dict | None = None, update_latest: bool = True, sleep=time.sleep) -> tuple[list, Path | None]:
+    """Run the cases `repeats` times. Each run gets its own report; only the FIRST run may become latest.md
+    (and only if it is full and clean, as always). With more than one run, the spread goes to REPEATS-<stamp>.md.
+    -> ([(rows, summary, report path)], repeats report path or None)."""
+    from eval import repeats as rep_mod
+
+    done = []
+    for i in range(repeats):
+        if repeats > 1:
+            print(f"\n=== run {i + 1} of {repeats} ===")
+        rows = evaluate(cases, service, judge, pause, retries=retries, sleep=sleep)
+        summary = summarize_all(rows)
+        path = write_report(rows, summary, models, update_latest=update_latest and i == 0)
+        done.append((rows, summary, path))
+    if repeats < 2:
+        return done, None
+    agg = rep_mod.aggregate([d[0] for d in done], [d[1] for d in done])
+    return done, rep_mod.write(agg, models, sources=[d[2].stem for d in done])
+
+
 def main() -> None:
     logging.basicConfig(level=logging.WARNING)
     ap = argparse.ArgumentParser()
@@ -435,6 +458,8 @@ def main() -> None:
     ap.add_argument("--no-judge", action="store_true")
     ap.add_argument("--pause", type=float, default=1.0, help="seconds between cases")
     ap.add_argument("--retries", type=int, default=2, help="times to wait out a per-minute rate limit per case")
+    ap.add_argument("--repeats", type=int, default=1, help="run the cases N times and write REPEATS-<stamp>.md")
+    ap.add_argument("--keep-latest", action="store_true", help="never overwrite eval/reports/latest.md")
     args = ap.parse_args()
 
     from app.graph import build_default_graph
@@ -443,14 +468,16 @@ def main() -> None:
     cases = load_cases(args.only)
     models = current_models()
     print("Models:", ", ".join(f"{role}={name}" for role, name in models.items()))
-    rows = evaluate(cases, ChatService(build_default_graph()), None if args.no_judge else Judge(), args.pause,
-                    retries=args.retries)
-    summary = summarize_all(rows)
-    path = write_report(rows, summary, models, update_latest=not args.only)
-    print("\n=== SUMMARY ===")
+    done, repeats_path = run_repeats(cases, ChatService(build_default_graph()), None if args.no_judge else Judge(),
+                                     max(1, args.repeats), args.pause, retries=args.retries, models=models,
+                                     update_latest=not args.only and not args.keep_latest)
+    rows, summary, path = done[-1]
+    print("\n=== SUMMARY (last run) ===")
     print(json.dumps(summary, indent=2))
-    print(f"\nReport: {path}")
-    errored = [r["id"] for r in rows if r.get("provider_error")]
+    print("\nReports: " + ", ".join(str(d[2]) for d in done))
+    if repeats_path:
+        print(f"Repeats: {repeats_path}")
+    errored = sorted({r["id"] for d in done for r in d[0] if r.get("provider_error")})
     if errored:
         print(f"\nWARNING: {len(errored)} case(s) hit a provider error (quota / rate limit / outage) and were "
               "left out of the metrics.\n"
