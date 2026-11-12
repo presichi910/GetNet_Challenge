@@ -47,6 +47,12 @@ class Settings(BaseSettings):
 
     # conversation memory: LangGraph checkpoints in one SQLite file (inside the data volume in Docker)
     checkpoint_db_path: str = "./data/checkpoints.sqlite"
+    # retention (the checkpoints hold customer data): a thread idle for more than this many days is
+    # deleted (0 = never), at startup and every `purge_interval_minutes`
+    thread_ttl_days: int = 30
+    purge_interval_minutes: float = 60.0
+    # conversations per customer. Above it /chat answers 429; nothing is ever deleted to make room (0 = no limit)
+    max_threads_per_user: int = 20
 
     # how many past messages the agents see
     history_window: int = 6

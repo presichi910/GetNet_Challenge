@@ -19,8 +19,9 @@ def thread_id_for(user_id: str, conversation_id: str | None = None) -> str:
 
 
 class ChatService:
-    def __init__(self, graph):
+    def __init__(self, graph, memory=None):
         self.graph = graph
+        self.memory = memory  # app.memory.Memory: thread registry (limit, owner, last activity)
 
     def run_raw(self, message: str, user_id: str, thread_id: str | None = None) -> tuple[dict, int]:
         """Run the graph. Returns (state, latency_ms)."""
@@ -35,7 +36,15 @@ class ChatService:
         """`user_id` must be the authenticated user. The memory thread is derived from it here."""
         trace_id = uuid.uuid4().hex[:12]
         conversation_id = conversation_id or DEFAULT_CONVERSATION
-        state, latency_ms = self.run_raw(message, user_id, thread_id_for(user_id, conversation_id))
+        thread_id = thread_id_for(user_id, conversation_id)
+        # raises ThreadLimitExceeded for a new thread above the per-user limit, before anything runs
+        created = self.memory.begin_turn(user_id, thread_id) if self.memory else False
+        try:
+            state, latency_ms = self.run_raw(message, user_id, thread_id)
+        except Exception:
+            if created:  # the first turn of a thread failed: do not keep its slot or its leftovers
+                self.memory.abort_new_thread(thread_id)
+            raise
         outputs = state.get("agent_outputs", {})
 
         sources, seen = [], set()

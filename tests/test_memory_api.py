@@ -65,8 +65,8 @@ def test_lifespan_opens_the_sqlite_file_keeps_the_thread_across_restarts_and_clo
     get_settings.cache_clear()
     opened = []
 
-    def spy_open(path):
-        opened.append(Memory(path))
+    def spy_open(path, **limits):
+        opened.append(Memory(path, **limits))
         return opened[-1]
 
     monkeypatch.setattr("app.memory.open_memory", spy_open)
