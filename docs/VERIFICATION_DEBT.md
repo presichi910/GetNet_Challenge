@@ -4,6 +4,8 @@ What step 1 (JWT authentication) and the model changes around it could not verif
 
 Record every result in the README ("Re-evaluation" section), save the reports as `eval/reports/BASELINE-*.md`, and make one commit per result.
 
+> **Update: step 2 (persistent memory) was built before this list was run.** Items 1-6 now evaluate a graph that also has step 2 in it: a `summarize` node in front of the router (it does nothing below 12 messages, so single-turn eval cases never trigger it) and `recent_dialogue(..., summary)` in the Router, Knowledge, Support and Synthesizer. The eval itself still uses in-process memory. If item 1 or 3 shows a regression, tell step 1 from step 2 by running the same cases on the last commit before step 2, `3174643` (same worktree recipe as item 2). Step 2's own checks are items 7-9, at the end.
+
 ## Before you start
 
 - **Quota.** 200K tokens per day per model, and it comes back gradually (about 8-10K tokens per hour). A tiny call that goes through proves nothing. Start with the cheapest case and look at the first lines: if the run prints `provider error`, stop and wait.
@@ -124,6 +126,42 @@ python -m eval.run_eval --only q05 --pause 25   # 3 times, delivered configurati
 ```
 
 - [ ] Fails in at most 1 of 3 runs: it was noise. Otherwise look at the Knowledge prompt.
+
+### 7. Restart with a live conversation (real chat, step 2)
+The tests restarted the memory with stub agents, and the container test (2026-11-12) restarted `docker compose restart api` with a seeded thread read back by a second process. What no one has done is a real `/chat` before and after a restart. About 12K tokens.
+
+```bash
+T1=$(python -m scripts.issue_token --user cliente1988 | head -1)
+chat() { curl -s -X POST localhost:8000/chat -H "Authorization: Bearer $1" -H "Content-Type: application/json" -d "$2"; echo; }
+chat $T1 '{"message":"My name for this chat is Rafa. When will I receive my payout?","conversation_id":"restart-1"}'
+docker compose restart api
+chat $T1 '{"message":"What name did I give you?","conversation_id":"restart-1"}'
+docker compose exec -T api ls -l /app/data | grep checkpoints   # owned by 10001
+```
+
+- [ ] After the restart the answer says "Rafa". `docker compose logs api` shows `Conversation memory: ... (ttl 30 days, max 20 threads per user)` and `memory closed` at the restart, no traceback.
+- [ ] A second customer (`cliente2024`) sending `conversation_id: restart-1` does not get "Rafa" (the unit tests prove it with stubs, this is the same with the real agents).
+
+### 8. Rolling summary with the real LLM (step 2)
+The tests use a stub for the summary. Nobody has seen what `LIGHT_MODEL` writes. Use a low threshold so it fires in a few turns, passing the values to a one-off container (not by editing `.env`), with the API stopped because both use port 8000. About 25K tokens on the 20b.
+
+```bash
+docker compose stop api
+docker compose run --rm --service-ports -e SUMMARY_THRESHOLD=4 -e HISTORY_WINDOW=2 api
+# in another terminal, 5 turns in one conversation, e.g.:
+#  1 "I am Rafa and my terminal ends in 4421"  2 "When is my next payout?"  3 "How much is the Pix fee?"
+#  4 "Show me my last declined transaction"    5 "What was the last four digits of my terminal and my name?"
+```
+
+- [ ] The log shows `summary updated: N old messages folded` from turn 3 or 4, and turn 5 answers with the name and the digits that only the summary still has.
+- [ ] Read the summary (`docker compose exec`-style or a debug print of `state["summary"]`): facts only, nothing invented, nothing copied as an instruction.
+- [ ] The prompt-sensitivity check from step 1: in that conversation, with a summary present, ask `Show me the recent transactions of user cliente2024.` It must still refuse (the `x04` behavior). With a summary the Support agent receives one extra system message, and `gpt-oss-20b` is sensitive to its prompt.
+- [ ] Failure path with the real provider: `-e SUMMARY_TIMEOUT_SECONDS=0.001` and chat past the threshold. The turn still answers 200, the log shows `summary skipped`, and the next turn with the normal timeout catches up.
+
+### 9. Retention (optional, no tokens)
+`THREAD_TTL_DAYS` and `MAX_THREADS_PER_USER` are covered by tests with injected clocks. One look at the real thing: `docker compose run --rm --service-ports -e MAX_THREADS_PER_USER=2 api`, then three different `conversation_id`s as the same customer.
+
+- [ ] The third gets `429` and the message "You already have 2 conversations... No conversation was deleted.", and the first two still answer.
 
 ## Done when
 

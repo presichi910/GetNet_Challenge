@@ -74,7 +74,7 @@ Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider 
 ## 6. Open decisions (resolved with the product owner)
 - Routing style: multi-step plan (chosen) vs single-agent vs supervisor loop.
 - Customer data: mock JSON in-process (chosen).
-- Memory: LangGraph `MemorySaver`, `thread_id = "<user_id>:<conversation_id>"` with `user_id` taken from the JWT (chosen).
+- Memory: LangGraph checkpoints in SQLite (`SqliteSaver`, `CHECKPOINT_DB_PATH`), `thread_id = "<user_id>:<conversation_id>"` with `user_id` taken from the JWT (chosen). Rolling summary above `SUMMARY_THRESHOLD` messages, only the latest checkpoint per thread kept, TTL of idle threads (`THREAD_TTL_DAYS`) and a limit of conversations per customer (`MAX_THREADS_PER_USER`, HTTP 429). The eval and tests that pass no checkpointer still use `MemorySaver`. See README, "Conversation memory".
 - Models: one variable per role (`LLM_MODEL` knowledge, `LIGHT_MODEL` router/support/synthesizer, `JUDGE_MODEL`), passed to the containers by docker-compose (chosen). Support has its own `SUPPORT_MODEL` (default `LIGHT_MODEL`, set to `openai/gpt-oss-120b` in `.env.example`) because the 20b skips `get_recent_transactions` on declines (`q08`); a model change was chosen over a prompt change because the 20b is very sensitive to prompt wording. Not yet confirmed with a full eval (`docs/VERIFICATION_DEBT.md`).
 - Identity: JWT HS256 with a shared secret for the demo (chosen); the id comes only from `sub`. Body `user_id` kept optional for compatibility with the original contract.
 - Evaluation: offline dataset + LLM judge (chosen).
