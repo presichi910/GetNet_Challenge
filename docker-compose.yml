@@ -16,7 +16,7 @@ services:
     env_file: .env
     environment: *models
     volumes:
-      - ./data:/app/data   # keeps the data between restarts
+      - data:/app/data   # named volume: Chroma, tickets, handoffs survive restarts (see README, Production hardening)
     restart: unless-stopped
 
   # one-off jobs (not started by `up`):
@@ -27,7 +27,7 @@ services:
     profiles: ["tools"]
     env_file: .env
     volumes:
-      - ./data:/app/data
+      - data:/app/data
     command: ["python", "-m", "app.rag.ingest"]
 
   eval:
@@ -36,6 +36,12 @@ services:
     env_file: .env
     environment: *models
     volumes:
-      - ./data:/app/data
+      - data:/app/data
       - ./eval/reports:/app/eval/reports
     command: ["python", "-m", "eval.run_eval"]
+
+# Named volume, not a bind mount: the container runs as uid 10001 (not root), and a bind mount takes
+# its permissions from the host folder (root-owned files on Docker Desktop, OneDrive in between).
+# Docker creates the volume with the owner of /app/data in the image, which is that user.
+volumes:
+  data:
