@@ -67,3 +67,27 @@ def test_a_service_and_judge_without_callbacks_still_work():
 
     rows = evaluate([CASE], Old(), OldJudge(), pause=0)
     assert "usage" not in rows[0] and "agent_tokens" not in summarize(rows)
+
+
+# ---- holdout cases are summarized apart ----
+
+def test_holdout_cases_are_summarized_apart_and_never_mixed_into_the_main_metrics():
+    from eval.run_eval import load_cases, summarize_all
+
+    ok = {"routing_ok": True, "tools_ok": True, "latency_ms": 10, "handoff_ok": True}
+    rows = [{**ok, "id": "q1"}, {**ok, "id": "q2"},
+            {**ok, "id": "ho1", "holdout": True, "routing_ok": False},
+            {"id": "ho2", "holdout": True, "provider_error": "router: RateLimitError", "latency_ms": 0}]
+    s = summarize_all(rows)
+    assert s["cases"] == 2 and s["routing_accuracy"] == 1.0
+    assert s["holdout"]["cases"] == 1 and s["holdout"]["routing_accuracy"] == 0.0
+    assert s["provider_errors"] == 1  # an error in the holdout still keeps the run out of latest.md
+    text = render_report(rows, s, "stamp")
+    assert "## Holdout (blind cases, never used to tune prompts)" in text and "| ho1 (holdout) |" in text
+    held = [c for c in load_cases(None) if c.get("holdout")]
+    assert [c["id"][:4] for c in held] == ["ho01", "ho02", "ho03", "ho04", "ho05"]
+
+
+def test_rows_of_holdout_cases_are_marked(monkeypatch):
+    rows = evaluate([{**CASE, "holdout": True}, CASE], Service(), None, pause=0)
+    assert rows[0]["holdout"] is True and "holdout" not in rows[1]

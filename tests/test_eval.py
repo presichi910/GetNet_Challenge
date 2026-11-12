@@ -8,7 +8,7 @@ from eval.run_eval import load_cases, pct, routing_ok, summarize, tools_ok
 def test_dataset_covers_all_challenge_scenarios():
     ids = [c["id"] for c in load_cases(None)]
     assert len([i for i in ids if i.startswith("q")]) == 10
-    assert len([i for i in ids if i.startswith("h")]) == 3  # handoff
+    assert len([i for i in ids if i.startswith("h0")]) == 3  # handoff (ho* are the holdout cases)
     assert all({"id", "user_id", "message", "expected_agents"} <= set(c) for c in load_cases(None))
 
 

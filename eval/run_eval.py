@@ -12,6 +12,10 @@ Per case: routing check, tool check, handoff check, and the LLM judge (relevance
 groundedness, completeness, tone, 1-5). Also latency p50/p95, degraded rate, and the tokens and
 estimated cost of every case (agents and judge, per model; app/observability.py prices).
 
+Holdout cases ("holdout": true in the dataset) are written blind and are never used to tune a prompt.
+They run with the rest but are summarized apart ("Holdout" section), so the main metrics stay comparable
+with earlier reports and the holdout shows how the system does on cases nobody tuned it for.
+
 A case that hit a PROVIDER error (rate limit, exhausted quota, connection/5xx) says nothing
 about the system's quality, so it is marked `error` and left out of every metric. A run with
 provider errors does not overwrite eval/reports/latest.md.
@@ -124,7 +128,27 @@ def judge_question(case: dict) -> str:
 
 
 def error_row(case: dict, reason: str, latency_ms: int = 0) -> dict:
-    return {"id": case["id"], "message": case["message"], "provider_error": reason, "latency_ms": latency_ms}
+    row = {"id": case["id"], "message": case["message"], "provider_error": reason, "latency_ms": latency_ms}
+    if case.get("holdout"):
+        row["holdout"] = True
+    return row
+
+
+def split_holdout(rows: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(main rows, holdout rows)."""
+    return [r for r in rows if not r.get("holdout")], [r for r in rows if r.get("holdout")]
+
+
+def summarize_all(rows: list[dict]) -> dict:
+    """The main summary (holdout cases left out) plus, if there are holdout cases, their own summary
+    under "holdout". `provider_errors` counts both, so a run with an error anywhere never becomes latest.md."""
+    main, held = split_holdout(rows)
+    s = summarize(main)
+    if held:
+        s["holdout"] = summarize(held)
+        s["provider_errors"] = s.get("provider_errors", 0) + s["holdout"].get("provider_errors", 0)
+        s.update(usage_summary(rows))  # tokens and cost: the whole run, holdout included
+    return s
 
 
 def pct(values: list[float], p: float) -> float:
@@ -216,6 +240,8 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float,
         row["handoff_ok"] = handoff_ok(c, reason)
         if c.get("history"):
             row["history"] = c["history"]  # which conversation the message was answered in
+        if c.get("holdout"):
+            row["holdout"] = True
         if collectors and collectors[0].spans:
             row["usage"] = collectors[0].usage()
         if judge:
@@ -326,8 +352,12 @@ def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | No
     if summary.get("provider_errors"):
         lines += [f"**{summary['provider_errors']} case(s) hit a provider error (rate limit / quota / outage) "
                   "and are excluded from every metric below.**", ""]
+    if summary.get("holdout"):
+        lines += [f"_The summary covers the {summary.get('cases', 0)} regular cases; the "
+                  f"{summary['holdout'].get('cases', 0)} holdout cases are summarized apart, below. "
+                  "`provider_errors` counts both._", ""]
     for k, v in summary.items():
-        if k in ("cases", "tokens_by_model"):
+        if k in ("cases", "tokens_by_model", "holdout"):
             continue
         if k.endswith("_cost_usd"):
             lines.append(f"- **{k}**: {_usd(v)}")
@@ -337,6 +367,19 @@ def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | No
             lines.append(f"- **{k}**: {v * 100:.0f}%")
         else:
             lines.append(f"- **{k}**: {v}")
+    if summary.get("holdout"):
+        lines += ["", "## Holdout (blind cases, never used to tune prompts)", ""]
+        for k, v in summary["holdout"].items():
+            if k == "tokens_by_model":
+                continue
+            if k.endswith("_cost_usd"):
+                lines.append(f"- **{k}**: {_usd(v)}")
+            elif k.startswith("avg_"):
+                lines.append(f"- **{k}**: {_score_pct(v)}")
+            elif k.endswith(("_accuracy", "_rate")):
+                lines.append(f"- **{k}**: {v * 100:.0f}%")
+            else:
+                lines.append(f"- **{k}**: {v}")
     if summary.get("tokens_by_model"):
         lines += ["", "## Tokens and estimated cost per model", "",
                   f"_Prices: app/observability.py (USD per 1M tokens, list prices of {PRICES_AS_OF}); "
@@ -355,7 +398,7 @@ def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | No
         j = r.get("judge", {})
         u = r.get("usage") or {}
         h_ok = {True: "OK", False: "FAIL", None: "-"}[r.get("handoff_ok")]
-        lines.append(f"| {r['id']} | {'OK' if r['routing_ok'] else 'FAIL'} {r.get('plan', '')} | {'OK' if r['tools_ok'] else 'FAIL'} "
+        lines.append(f"| {r['id']}{' (holdout)' if r.get('holdout') else ''} | {'OK' if r['routing_ok'] else 'FAIL'} {r.get('plan', '')} | {'OK' if r['tools_ok'] else 'FAIL'} "
                      f"| {h_ok} {r.get('handoff') or ''} | {_score_pct(j.get('relevance'))} | {_score_pct(j.get('groundedness'))} "
                      f"| {_score_pct(j.get('completeness'))} | {_score_pct(j.get('tone'))} "
                      f"| {j.get('verdict', '-')} | {r['latency_ms']} | {u.get('total_tokens', '-')} "
@@ -402,7 +445,7 @@ def main() -> None:
     print("Models:", ", ".join(f"{role}={name}" for role, name in models.items()))
     rows = evaluate(cases, ChatService(build_default_graph()), None if args.no_judge else Judge(), args.pause,
                     retries=args.retries)
-    summary = summarize(rows)
+    summary = summarize_all(rows)
     path = write_report(rows, summary, models, update_latest=not args.only)
     print("\n=== SUMMARY ===")
     print(json.dumps(summary, indent=2))
