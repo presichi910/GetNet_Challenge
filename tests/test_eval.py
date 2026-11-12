@@ -291,3 +291,22 @@ def test_a_real_per_minute_message_is_still_retried():
     rows = evaluate([CASE], FakeService(good_state(router_error=minute), good_state()), None, pause=0,
                     retries=2, sleep=waits.append)
     assert waits == [pytest.approx(11.5)] and not rows[0].get("provider_error")
+
+
+def test_rows_keep_the_exact_tool_calls_with_their_arguments():
+    from eval.run_eval import evaluate
+
+    state = good_state(agent_outputs={
+        "support": {"answer": "a", "error": None, "contexts": [], "tool_calls": [
+            {"name": "get_terminal_status", "args": {}},
+            {"name": "get_recent_transactions", "args": {"limit": 5, "status": "declined"}}]},
+        "knowledge": {"answer": "b", "error": None, "contexts": [], "tool_calls": [
+            {"name": "search_getnet_kb", "args": {"query": "decline error"}}]},
+    })
+    row = evaluate([CASE], FakeService(state), None, pause=0)[0]
+    assert row["tool_calls"] == [
+        {"agent": "support", "name": "get_terminal_status", "args": {}},
+        {"agent": "support", "name": "get_recent_transactions", "args": {"limit": 5, "status": "declined"}},
+        {"agent": "knowledge", "name": "search_getnet_kb", "args": {"query": "decline error"}},
+    ]
+    assert row["tools_called"] == ["get_terminal_status", "get_recent_transactions", "search_getnet_kb"]  # unchanged

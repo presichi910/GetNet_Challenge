@@ -161,6 +161,9 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float,
         row = {
             "id": c["id"], "message": c["message"], "plan": state.get("plan", []),
             "answer": state["final_answer"], "tools_called": called,
+            # the exact calls (agent, tool, arguments), to see what the model really asked for
+            "tool_calls": [{"agent": a, "name": tc["name"], "args": tc.get("args", {})}
+                           for a, o in outs.items() for tc in o.get("tool_calls", [])],
             "routing_ok": routing_ok(c, state.get("plan", [])), "tools_ok": tools_ok(c, called),
             "degraded": any(o.get("error") for o in outs.values()), "latency_ms": latency,
         }
