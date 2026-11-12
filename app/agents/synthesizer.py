@@ -29,7 +29,7 @@ def make_synthesizer_node(llm=None):
 
         try:
             if not state.get("plan"):
-                history = recent_dialogue(state["messages"], get_settings().history_window)
+                history = recent_dialogue(state["messages"], get_settings().history_window, state.get("summary", ""))
                 msg = model.invoke([SystemMessage(content=SYNTHESIZER_DIRECT_PROMPT.format(language=language)), *history])
                 answer = str(msg.content).strip()
             elif len(ok) == 1:

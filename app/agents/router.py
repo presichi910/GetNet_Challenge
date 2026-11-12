@@ -41,7 +41,7 @@ def make_router_node(llm=None):
         if structured is None:
             structured = (llm or get_llm(model=get_settings().light_model)).with_structured_output(RoutingDecision, method="function_calling")
 
-        history = recent_dialogue(state["messages"], get_settings().history_window)
+        history = recent_dialogue(state["messages"], get_settings().history_window, state.get("summary", ""))
         router_error = ""
         try:
             decision: RoutingDecision = structured.invoke([SystemMessage(content=ROUTER_PROMPT), *history])

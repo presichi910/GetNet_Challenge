@@ -127,6 +127,8 @@ def make_handoff_node(repo: CustomerRepository | None = None, notifier: HandoffN
             "agent_findings": findings,
             "tool_calls": [{"agent": a, **tc} for a, o in outs.items() for tc in o.get("tool_calls", [])],
         }
+        if state.get("summary"):  # the operator also needs what was said before the window
+            record["earlier_summary"] = state["summary"]
         try:
             queue.notify(record)
         except Exception:  # noqa: BLE001 - the customer still gets a reply

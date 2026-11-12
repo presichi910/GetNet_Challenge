@@ -4,20 +4,25 @@ from __future__ import annotations
 import logging
 
 from langchain.agents import create_agent
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.state import AgentResult
 from app.tools.handoff_tools import ESCALATE_TOOL
 
 log = logging.getLogger(__name__)
 
+SUMMARY_HEADER = "Summary of the earlier part of this conversation (those messages were removed):\n"
 MAX_CONTEXT_CHARS = 8000  # enough for a full retrieval, so the judge sees everything
 
 
-def recent_dialogue(messages: list[AnyMessage], window: int) -> list[AnyMessage]:
-    """Last few human/AI messages, without tool chatter."""
+def recent_dialogue(messages: list[AnyMessage], window: int, summary: str = "") -> list[AnyMessage]:
+    """Last few human/AI messages, without tool chatter. With a `summary` (the rolling summary of
+    older messages) it goes first as a system message. Without one the result is unchanged."""
     dialogue = [m for m in messages if isinstance(m, (HumanMessage, AIMessage)) and m.content]
-    return dialogue[-window:]
+    dialogue = dialogue[-window:]
+    if summary:
+        return [SystemMessage(content=SUMMARY_HEADER + summary), *dialogue]
+    return dialogue
 
 
 def format_prior_context(agent_outputs: dict[str, AgentResult]) -> str:

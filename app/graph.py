@@ -29,8 +29,9 @@ def next_node(state: GraphState) -> str:
 
 
 def build_graph(router: Callable, knowledge: Callable, support: Callable, synthesizer: Callable,
-                handoff: Callable, checkpointer=None):
-    """Nodes are passed in so tests can use stubs."""
+                handoff: Callable, checkpointer=None, summarizer: Callable | None = None):
+    """Nodes are passed in so tests can use stubs. With a `summarizer`, it runs before the router
+    every turn (it only acts above the message threshold). Routing itself is unchanged."""
     g = StateGraph(GraphState)
     g.add_node("router", router)
     g.add_node("knowledge", knowledge)
@@ -38,7 +39,12 @@ def build_graph(router: Callable, knowledge: Callable, support: Callable, synthe
     g.add_node("synthesizer", synthesizer)
     g.add_node("handoff", handoff)
 
-    g.add_edge(START, "router")
+    if summarizer is not None:
+        g.add_node("summarize", summarizer)
+        g.add_edge(START, "summarize")
+        g.add_edge("summarize", "router")
+    else:
+        g.add_edge(START, "router")
     targets = {**{n: n for n in AGENT_NODES}, "synthesizer": "synthesizer", "handoff": "handoff"}
     for src in ("router", *AGENT_NODES):
         g.add_conditional_edges(src, next_node, targets)
@@ -55,6 +61,7 @@ def build_default_graph(checkpointer=None):
     conversations to disk). The API passes the persistent one, see `app.main.lifespan`."""
     from app.agents.knowledge import make_knowledge_node
     from app.agents.router import make_router_node
+    from app.agents.summarizer import make_summarizer_node
     from app.agents.support import make_support_node
     from app.agents.synthesizer import make_synthesizer_node
     from app.config import get_settings
@@ -63,4 +70,5 @@ def build_default_graph(checkpointer=None):
 
     repo = CustomerRepository(tickets_file=get_settings().tickets_file)  # shared, so handoff tickets show up for Support
     return build_graph(make_router_node(), make_knowledge_node(), make_support_node(repo=repo),
-                       make_synthesizer_node(), make_handoff_node(repo=repo), checkpointer=checkpointer)
+                       make_synthesizer_node(), make_handoff_node(repo=repo), checkpointer=checkpointer,
+                       summarizer=make_summarizer_node())

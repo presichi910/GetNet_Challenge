@@ -50,6 +50,11 @@ class Settings(BaseSettings):
 
     # how many past messages the agents see
     history_window: int = 6
+    # rolling summary: above this many messages, the older ones are folded into `summary` and removed,
+    # keeping the last `history_window`. Uses LIGHT_MODEL. If it fails or takes longer than the
+    # timeout, the turn goes on without it and the next turn tries again.
+    summary_threshold: int = 12
+    summary_timeout_seconds: float = 20.0
 
     log_level: str = "INFO"
 
