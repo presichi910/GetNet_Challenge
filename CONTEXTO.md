@@ -51,19 +51,19 @@ Leyenda: ✅ hecho · 🟡 a medias (hecho en código, falta evidencia o visibil
 | 2 | `conversation_id` separado de `user_id` | ✅ visible | `thread_id = "<sub>:<conversation_id>"` (`app/service.py`). |
 | 3 | Ownership de conversación | ✅ visible | Tabla `threads` en `app/memory.py`; `GET/DELETE /conversations/{id}`; ajeno/inexistente = mismo 404. |
 | 4 | Tests negativos entre usuarios | ✅ visible | `tests/test_auth.py` (`test_body_user_id_of_another_customer_is_403`, `test_prompt_asking_for_another_customer_still_runs_as_the_token_user`), `tests/test_memory.py::test_two_users_never_cross_threads_with_the_persistent_saver`, `tests/test_operator_api.py`, `tests/test_tool_schemas.py`. |
-| 5 | Checkpointer persistente | ✅ visible / 🟡 sin LLM real | `SqliteSaver` (`langgraph-checkpoint-sqlite==3.1.3`) en el volumen `data`. Falta deuda 7 (reinicio con conversación viva y LLM real). |
-| 6 | Resumen rodante | ✅ visible / 🟡 sin LLM real | Nodo `summarize` (`app/agents/summarizer.py`), `SUMMARY_THRESHOLD=12`, `RemoveMessage`, nunca rompe el turno. Falta deuda 8 (qué escribe el LLM real, `x04` con resumen presente, ruta de timeout). |
+| 5 | Checkpointer persistente | ✅ | `SqliteSaver` en el volumen `data`. Deuda 7 hecha con LLM real (`69cc378`): el reinicio conserva la conversación. |
+| 6 | Resumen rodante | ✅ / 🟡 | Deuda 8 hecha (`69cc378`): el resumen se dispara, solo tiene hechos, `x04` sigue rechazando con resumen, el timeout no rompe el turno. Hueco: con una tool a mano el modelo ignora el resumen ("Rafa"/"4421"). |
 | 7 | Retención / privacidad de memoria | ✅ visible | TTL, `MAX_THREADS_PER_USER` (429), `secure_delete` + truncado del WAL, una fila de checkpoint por hilo. Deuda 9 opcional (sin tokens). |
-| 8 | HITL operador: claim/reply/approve/reject/resume | ✅ visible / 🟡 sin LLM real | `app/handoff_store.py` (cola SQLite, exactamente-una-vez por SQL, leases, idempotencia), `/operator/*`, rol `operator`, la respuesta del operador entra al contexto como `[Operador humano]`. Falta deuda 11–13, y la 12 es la más sensible (tratarla como cambio de prompt, correr `x04`). |
+| 8 | HITL operador: claim/reply/approve/reject/resume | ✅ / 🟡 | Deuda 11–13 hecha con LLM real (`69cc378`): handoffs reales en la cola, reply llega una vez, leases y 409, `x04` tras un reply sigue rechazando (no se tocó `context=`). Hueco: los agentes no usan el texto del operador para responder. |
 | 9 | Reporte versionado con todos los casos | ✅ local | `latest.md` con los 27 casos en Fireworks (22 regulares + 5 holdout), 0 errores, tokens y costo (`8ecfe29`). Copia: `BASELINE-FIREWORKS-FULL-20261112-131428.md`. El de 17 casos en Groq queda como `BASELINE-FULL-DELIVERED-20261112-092550.md`. **Falta push.** |
 | 10 | Docker no-root | ✅ visible | `Dockerfile` con `USER app` (uid 10001), código de solo lectura, volumen nombrado `data`. |
-| 11 | CI | 🟡 | `.github/workflows/ci.yml` (pytest en 3.12 + build + chequeo uid 10001) existe en `origin/main`, pero **nadie ha visto una ejecución verde en GitHub**. |
+| 11 | CI | ✅ | Verde en GitHub para `95fd928` (jobs `test` y `docker`), y para `022c38a`. |
 | 12 | Tracing, tokens, costo, dashboards, alertas | ✅ local / ❌ dashboards | `app/observability.py` (`4f65d35`): callback por request, tokens y costo por nodo y modelo, `traces.sqlite` sin texto (se borra con DELETE y TTL), `usage` en `/chat`, `GET /operator/metrics`, líneas `ALERT`, tokens y costo en la eval. Sin dashboards visuales ni OTel. |
 | 13 | Calibración humana del juez | 🟡 | Herramienta hecha (`eval/calibration/export.py`, `agreement.py`, `aff8351`) y plantilla de la corrida final commiteada. **Faltan las etiquetas humanas** (las pone el usuario). |
-| 14 | Corridas repetidas sistemáticas | 🟡 | `REPEATS-20261112.md`: `x04`, `h01–h03`, `q08` ×4 en Fireworks. Sin `--repeats` ni varianza de la eval completa (T2b, fuera de plazo). |
+| 14 | Corridas repetidas sistemáticas | ✅ | `--repeats N` (`cbd1db1`) y `REPEATS-20261112-135803.md` (3 corridas más de los 27 casos, `fab2f86`): routing 95%, tools 100%, handoff 95% en todas; inestables `q05`, `m01`, `m05`, `ho03`; fallan siempre `x04`, `m03`, `ho02`. |
 | 15 | Acuerdo del juez / holdout ciego | 🟡 | Holdout `ho01–ho05` hecho (`63d4b85`; routing 80%, juez 80%). Autoacuerdo del juez no hecho (T2d: el reporte no guarda la evidencia que vio el juez). |
 | 16 | Replanificación adaptativa | ❌ por decisión | Defensa escrita con costo medido y criterio de cambio en `docs/V4_REMEDIATION.md` ("Plan first, then run"). |
-| 17 | RAG híbrido + métricas de retrieval | ❌ | Fuera del plazo (D5/T4). Solo denso. |
+| 17 | RAG híbrido + métricas de retrieval | 🟡 | Métricas hechas (`14cded9`, `RETRIEVAL-20261112-140553.md`): hit@1 0,33, hit@5 0,71, recall@5 0,67, MRR 0,50, nDCG@5 0,54. Híbrido BM25+RRF no hecho (decisión del usuario). |
 | 18 | Seguimientos sobre la propia conversación ("¿qué te dije?") | 🟡 limitación (D2) | Router no tocado. En Fireworks (Router en 120b) `m01` y `m02` ya van con plan vacío y `m03` sigue a Knowledge; `m01` y `m05` fallan el juez. Documentado en README Limitations. |
 | 19 | Falso positivo de `x04` | 🟡 documentado | En Fireworks escala **4/4** (en Groq 1/5); nunca llama tools de datos (4/4). Arreglarlo exige tocar el prompt de Support. |
 | 20 | Video de entrega actualizado | ❌ (usuario) | El enunciado pide video ≤ 15 min. |
@@ -155,10 +155,10 @@ Python 3.12 (imagen y CI) / 3.13 (`.venv` local), FastAPI, LangGraph 1.2.20 (Sta
 
 ## 7. Lo que falta
 
-1. **Push** de los commits locales y ver el CI verde en GitHub.
+1. Push final de esta tarde y revisar el CI del último commit.
 2. Poner en `.env`: `LIGHT_MODEL=accounts/fireworks/models/gpt-oss-120b` (Fireworks no sirve el 20b).
 3. **Etiquetas humanas** en `eval/calibration/labels_template.csv` y correr `agreement.py`.
-4. Pendiente, fuera del plazo de entrega: deuda 7–13 con LLM real (T5), métricas de RAG y BM25/RRF (T4), `--repeats` con varianza (T2b), autoacuerdo del juez (T2d), regla del Router para seguimientos (T3, decidido no tocar el Router).
+4. Pendiente: autoacuerdo del juez (T2d), híbrido BM25/RRF o reranker (T4 opcional), regla del Router para seguimientos (T3, decidido no tocar el Router). Huecos de comportamiento encontrados en la deuda 7–13 (texto del operador no usado, resumen ignorado frente a tools): necesitan cambios de prompt.
 5. Limitaciones nuevas documentadas: `x04` escala 4/4 en Fireworks; el Router en 120b marca como portugués mensajes en inglés con palabras en portugués; Knowledge mete datos del cliente en la consulta a la KB (`ho02`, sale a Voyage).
 6. **Video ≤ 15 min** y re-entrega (lo hace el usuario).
 
@@ -216,8 +216,8 @@ git checkout eval/reports/latest.md                          # restaurar tras un
 - `data/handoffs.jsonl` local tiene ~85 líneas de pruebas viejas con extractos (en `.gitignore`); la importación está apagada por defecto.
 - Docker Desktop puede estar apagado: comprobar, no asumir.
 
-## 12. Estado de git (2026-11-12, fin de la sesión)
+## 12. Estado de git (2026-11-12, 14:10 Monterrey)
 
-- `origin/main` = `022c38a`.
-- Commits locales sin push: los 6 de la mañana (`f55a085` … `2dbffca`) y los de la tarde: `867f8dd` (este archivo), `ac6e4e0` (Fireworks), `4f65d35` (observabilidad), `63d4b85` (holdout), `aff8351` (calibración), `8ecfe29` (eval final y repeticiones) y los de documentación que vienen después (ver `git log origin/main..HEAD`).
-- Los archivos de contexto viejos (`PASO2_CONTEXTO.md`, `Contexto_p4.md`, `docs/CONTEXT_FOR_NEW_CHAT.md`, `docs/contexto_p1.md`) se borraron con permiso del usuario. `CONTEXTO_GETNET.md` (raíz, sin seguimiento) es del usuario y no se tocó.
+- Push hecho a las 13:28 (`022c38a..95fd928`); CI verde en GitHub para `95fd928`.
+- Commits posteriores (push al terminar esta tarde): `a722330` (coherencia de docs), `69cc378` (deuda 7–13 con LLM real), `cbd1db1` (`--repeats`), `14cded9` (métricas de retrieval), `fab2f86` (3 corridas repetidas) y el commit final de documentación.
+- Los archivos de contexto viejos se borraron con permiso del usuario. `CONTEXTO_GETNET.md` (raíz, sin seguimiento) es del usuario y no se tocó.

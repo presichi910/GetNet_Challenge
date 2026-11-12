@@ -60,6 +60,8 @@ HTTP service that answers Getnet customer messages by orchestrating specialised 
 | F49 | The eval report shows tokens and cost per case and per model (agents and judge) | `tests/test_eval_usage.py` |
 | F50 | Holdout cases (`"holdout": true`, `ho01`-`ho05`) are summarized apart from the main metrics; a provider error in either keeps the run out of `latest.md` | `test_holdout_cases_are_summarized_apart_and_never_mixed_into_the_main_metrics`, `test_rows_of_holdout_cases_are_marked` |
 | F51 | Judge calibration: `eval/calibration/export.py` writes a labels CSV from a run; `agreement.py` computes pass/fail agreement, Cohen's kappa, confusion matrix and MAE per dimension | `tests/test_calibration.py` |
+| F52 | `--repeats N` runs the cases N times, one report per run (only the first may become `latest.md`), and writes `REPEATS-<stamp>.md` with mean/min/max per metric, passes per case and unstable cases | `tests/test_repeats.py` |
+| F53 | Retrieval metrics (hit@1/3/5, recall@5, MRR, nDCG@5) of the real retriever on a labelled question set with a holdout part | `tests/test_retrieval_metrics.py`, `eval/reports/RETRIEVAL-*.md` |
 
 ## 3. Non-functional requirements
 

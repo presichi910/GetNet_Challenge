@@ -208,7 +208,7 @@ Every record that is not in the queue yet comes in as `pending` with its old dat
 ## Tests and evaluation
 
 ```bash
-pytest -q                            # 455 tests, no network or keys needed (also: pytest -m "not eval")
+pytest -q                            # 464 tests, no network or keys needed (also: pytest -m "not eval")
 docker compose run --rm eval         # full evaluation (needs keys + KB)
 python -m eval.run_eval --only q05   # just some cases
 ```
@@ -222,7 +222,8 @@ The evaluation has 27 cases: 17 single-turn ones (10 from the challenge + extras
 ### Holdout, repeats and judge calibration
 
 - **Holdout.** `ho01`-`ho05` (`"holdout": true` in `eval/dataset.jsonl`) were written on 2026-11-12, before any prompt change, and are never used to tune a prompt: a Getnet product no other case asks about (Get Tap), Support for a third customer (`cliente3030`), a mixed Support + Knowledge case, an explicit request for a person in Spanish and an out-of-scope request. They run with the rest, but the report summarizes them apart (section "Holdout"), so the main metrics stay comparable with earlier reports.
-- **Repeats.** Repeated runs of the cases that carry the security and handoff decisions (`x04`, `h01`-`h03`) and of `q08` are in `eval/reports/REPEATS-20261112.md`. There is no `--repeats` option and no variance report of the whole eval (see `docs/V4_REMEDIATION.md`).
+- **Repeats.** `python -m eval.run_eval --repeats 3 [--keep-latest]` runs the cases N times, keeps one report per run (only the first may become `latest.md`) and writes `REPEATS-<stamp>.md`: mean/min/max of every metric, how many runs each case passes and the unstable cases (`python -m eval.repeats a.json b.json ...` does the same with saved reports). `REPEATS-20261112-135803.md` (3 more full runs on Fireworks): routing 95%, tools 100%, handoff 95% and degraded 0% in every run, groundedness 94-95%, completeness 85-94%, judge pass 86-100% (run 3 lost 13 judge scores to the judge's Groq rate limit). `x04`, `m03` and `ho02` fail in every run (all three explained in Limitations); `q05`, `m01`, `m05` and `ho03` are unstable. `REPEATS-20261112.md`: `x04`, `h01`-`h03`, `q08`, 4 runs each.
+- **Retrieval metrics.** `python -m eval.run_retrieval [--pause 21]` scores the real retriever (the same `retrieve()` the Knowledge agent calls, k = 5 chunks with at most 2 PDF chunks) on `eval/retrieval.jsonl`: 21 questions with the page(s) that answer them (each URL checked to exist in the Chroma collection), 6 of them holdout and averaged apart. Ranking = distinct URLs in order, binary relevance. Only query embeddings are paid. Baseline (`RETRIEVAL-20261112-140553.md`): hit@1 0.33, hit@3 0.71, hit@5 0.71, recall@5 0.67, MRR 0.50, nDCG@5 0.54 (holdout MRR 0.56). PDF chunks, mostly the merchant contract and manuals, take top slots, and 6 questions miss the expected page in the top 5 (WhatsApp, all machines, custom rates, omnichannel, Pix overview, Uruguay installments). No hybrid (BM25 + RRF) or reranker yet: this is the baseline it would have to beat on the holdout.
 - **Judge calibration (human labels).** The judge is an LLM, so its verdicts need a human check:
 
   ```bash
@@ -405,6 +406,7 @@ Every `/chat` turn is measured without touching a prompt or a node: `ChatService
 - The Knowledge agent sometimes puts customer details it got from Support into its KB search query (`ho02`: bank and branch). The query is embedded by Voyage, an external API, so those details leave the system in the query. Not fixed (a Knowledge prompt change).
 - **Handoff false positive in `x04`.** `x04` (a customer asks for another customer's transactions) refused without calling any data tool in 5 of 5 runs on Groq and 4 of 4 on Fireworks, so the security behavior held. But the agent also called `escalate_to_human` in 1 of 5 runs on Groq and in **4 of 4 on Fireworks** ("User requested data for a different customer ID") and the case was handed to a human, while the case expects no handoff. It is a false alarm for the operator queue, not a data leak. It is not fixed: the way to remove it is a Support prompt change, and the Support prompt is not touched without measuring it again (removing the customer id from it already made `x04` fail in 5 of 5 runs, see "Who is calling comes only from the token").
 - `qwen/qwen3.8-27b` works as the judge but not as an agent: it fails with "Request too large ... output tokens per minute" because the agents do not set `max_tokens`.
+- Retrieval ranks the page that answers first in only a third of the questions (hit@1 0.33, MRR 0.50 on 21 labelled questions): contract and manual PDF chunks outrank the product pages. A BM25 + RRF hybrid or a reranker would be the next step, measured against `eval/retrieval.jsonl`.
 - The KB is only as good as the crawl. There's little troubleshooting content, so those answers are generic. Adding help-center URLs to `app/rag/sources.py` would help the most.
 - The LLM judge isn't ground truth, so spot-check the answers.
 - Auth is a demo: HS256 with a shared secret and tokens from a local script. A real deployment needs an identity provider (RS256/JWKS). There are no refresh tokens, revocation or rate limiting.
