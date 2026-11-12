@@ -230,11 +230,11 @@ They come from `.env`, `docker-compose.yml` passes them to the containers, and o
 
 ### Latest full report
 
-`eval/reports/latest.md` (2026-11-09, 14 of the 17 cases, before the authentication change): routing 100%, tools 100%, judge pass rate 93%, p50 6.8 s. The one failure was a factual slip that didn't repeat in 3 retries. The three handoff cases were not in that report.
+`eval/reports/latest.md` (2026-11-12): **all 17 cases**, no provider errors, in the delivered configuration (Knowledge and Support on `gpt-oss-120b`, Router and Synthesizer on `gpt-oss-20b`, judge `qwen3.8-27b`). Routing 100%, tool use 100%, handoff accuracy 100%, judge pass rate 100%, groundedness 93%, completeness 94%, latency p50 4.2 s and p95 8.6 s. It is one run and the judge is not ground truth, so read the small differences as noise. A stable copy is `eval/reports/BASELINE-FULL-DELIVERED-20261112-092550.md`. It replaces the 2026-11-09 report, which had 14 cases and no handoff case.
 
-### Re-evaluation after the authentication change (2026-11-11)
+### Re-evaluation after the authentication change (2026-11-11 and 2026-11-12)
 
-Nine Support/handoff cases (`q03 q05 q08 x01 x03 x04 h01 h02 h03`), one run each, so small differences are noise. Reports: `eval/reports/BASELINE-*.md`.
+**2026-11-11.** Nine Support/handoff cases (`q03 q05 q08 x01 x03 x04 h01 h02 h03`), one run each, so small differences are noise. Reports: `eval/reports/BASELINE-*.md`.
 
 | | default models | everything on `gpt-oss-120b` |
 |---|---|---|
@@ -247,10 +247,18 @@ Nine Support/handoff cases (`q03 q05 q08 x01 x03 x04 h01 h02 h03`), one run each
 
 - `x04` (asking for another customer's data) is refused in both runs, and `h01`/`h02` always hand off.
 - `q08`: with `gpt-oss-20b` the Support agent calls only `get_terminal_status` and blames the Wi-Fi, although the data has two declined sales (codes 51 and 05) and the prompt says to always call `get_recent_transactions` for a decline. In the reports we have, Support on the 20b skipped that tool in 5 of 6 runs, and on the 120b it called it in 7 of 7 (six of those are from 11-08, before the light model existed, so only today's run is a controlled comparison). The judge passes the 20b answer because it never sees the transactions, so the tool check is the only signal.
-- `q05` failed groundedness on the 120b run (the answer added details like 2.4 GHz and a faulty module that the tools did not return). It is a single run: review with more data (`docs/VERIFICATION_DEBT.md`, item 6).
-- Tokens measured in the 120b run (8 cases plus part of `h03`): about 39.9K on `gpt-oss-120b` and 9.2K on the judge. The Knowledge cases cost 9-13K each, so I estimate the full 17 cases at around 120K tokens, which needs a fresh daily quota.
-- **Pending** (both gpt-oss models ran out of daily quota that day): the regression check of the authentication commit with the default models (only `q03` ran before the 20b quota ended), the same cases on the commit before it, `h03` on the 120b, the full 17-case run, the Support route with tools inside the container, and confirming the `q08` fix below. The list, with commands and expected results, is in [docs/VERIFICATION_DEBT.md](docs/VERIFICATION_DEBT.md).
-- **`q08` fix: `SUPPORT_MODEL`.** Support runs on its own model variable, set to the 120b in `.env.example`. In the one controlled run it called `get_recent_transactions`; it has not been confirmed with a full eval yet. The eval now records the exact tool calls with their arguments (`tool_calls` in the JSON report).
+- `q05` failed groundedness on the 120b run (the answer added details like 2.4 GHz and a faulty module that the tools did not return). Single run: it was reviewed on 2026-11-12, see below.
+- Both gpt-oss models ran out of daily quota that day, so the checks below were pending until 2026-11-12.
+
+**2026-11-12 (quota restored).** All the pending checks were run (list and results in [docs/VERIFICATION_DEBT.md](docs/VERIFICATION_DEBT.md), items 1-6). Reports: `eval/reports/BASELINE-*.md`.
+
+- **No regression from the authentication change.** The same 9 cases on HEAD with the default models match the 2026-11-11 baseline in every case. The same cases on the commit before step 1 (`bab3729`) and on HEAD, with the same models, are identical, so `q08` failing on the 20b is older than the authentication change. HEAD already includes the later steps (memory, handoff queue).
+- **`q08` fix confirmed: `SUPPORT_MODEL`.** Support runs on its own model variable, set to the 120b in `.env.example`. It called `get_recent_transactions(limit=5, status="declined")` in 4 of 4 runs of the delivered configuration (the full report plus three repeats); the exact calls are in `BASELINE-REPEATS-20261112.md` (the eval now records tool arguments in the JSON report).
+- **`q05` was noise.** It passes in the full report and in 3 of 3 repeats; the 40% groundedness of 2026-11-11 was 1 failure in 5 runs.
+- **`h03`** hands off with `escalate_to_human` in 4 of 4 runs. **`x04`** refuses without calling any data tool in 5 of 5 runs with Support on the 120b, but in 1 of them the agent also escalated to a human ("User requested data for a different customer ID"), which counts as a handoff the case does not expect.
+- **Tokens measured** for the full 17 cases: 56.7K on `gpt-oss-120b`, 18.8K on `gpt-oss-20b` and 26K on the judge (the earlier estimate of 120K was too high).
+- **Container (Docker), same day.** The image runs as uid 10001, `/health` reports the 1,493-chunk knowledge base copied into the `data` volume, and the Support route works with real tools for two customers: each sees only their own profile and payouts, and a request for another customer's transactions is refused. Handoffs and tickets written by the non-root process are in the volume and show up in the operator queue, and `docker compose run --rm eval` writes its report to `./eval/reports` on the host.
+- **What the container check did not settle.** In one conversation, a follow-up that refers to an earlier turn was answered with that context once, but pure recall questions ("What favorite color did I tell you?", "Which of the two is bigger?") were routed to Knowledge in 3 of 3 attempts, and Knowledge cannot answer them (it escalated twice, and failed once on the 120b quota). The conversation is stored and listed correctly; the weakness is in routing such follow-ups. Support on the 120b also hit its daily quota in the middle of the session, so the agent was degraded and handed the case to a human, which is the designed behavior.
 
 Handoff behavior: explicit requests for a human always escalated. The unanswerable loan question escalated most of the time but not always, since the agent decides whether to call `escalate_to_human` (see Limitations).
 
@@ -310,7 +318,8 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
 - Customer data is fake.
 - The handoff queue has an API (see "Human oversight") but no operator UI, no notification when a case arrives, so "a human will follow up" is only as true as somebody polling `/operator/handoffs`. A real setup needs Slack/Teams/helpdesk behind `HandoffNotifier`. The path from a real agent's handoff to the queue, and what the real LLM does with an operator's reply in its context, are tested with stub agents and a recording fake LLM, not yet with the real one (`docs/VERIFICATION_DEBT.md`, items 11 and 12).
 - Whether an agent escalates is the LLM's call, so it can miss sometimes.
-- With `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). `SUPPORT_MODEL=openai/gpt-oss-120b` (the delivered setting) avoids it in the runs we have, at the cost of 120b quota, but it is not yet confirmed with a full eval.
+- With `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). `SUPPORT_MODEL=openai/gpt-oss-120b` (the delivered setting) avoids it (4 of 4 runs), at the cost of 120b quota, which Knowledge shares: a day of testing can use it up, and then the agents degrade and hand cases to a human.
+- Follow-up questions that only refer to the conversation ("what did I tell you?", "which of the two is bigger?") are often routed to Knowledge, which cannot answer them and escalates (seen 3 of 3 times in the container check). With Support on the 120b, `x04` escalated to a human in 1 of 5 runs even though the refusal itself held.
 - `qwen/qwen3.8-27b` works as the judge but not as an agent: it fails with "Request too large ... output tokens per minute" because the agents do not set `max_tokens`.
 - The KB is only as good as the crawl. There's little troubleshooting content, so those answers are generic. Adding help-center URLs to `app/rag/sources.py` would help the most.
 - The LLM judge isn't ground truth, so spot-check the answers.
