@@ -58,6 +58,8 @@ HTTP service that answers Getnet customer messages by orchestrating specialised 
 | F47 | `GET /operator/metrics?since=&until=` (operator only): requests, latency p50/p95, degraded and handoff rates, provider errors, tokens and cost per node and model | `test_metrics_aggregates_for_an_operator`, `test_metrics_is_403_for_a_merchant_...` |
 | F48 | A turn above `MAX_TURN_TOKENS` / `MAX_TURN_COST_USD`, or with a provider 429, logs a WARNING `ALERT` line; the request log line gains `tokens=` and `cost_usd=` | `test_a_turn_above_the_token_or_cost_limit_logs_an_alert`, `test_no_alert_under_the_limits_and_a_429_is_an_alert`, `test_the_existing_log_line_keeps_its_fields_...` |
 | F49 | The eval report shows tokens and cost per case and per model (agents and judge) | `tests/test_eval_usage.py` |
+| F50 | Holdout cases (`"holdout": true`, `ho01`-`ho05`) are summarized apart from the main metrics; a provider error in either keeps the run out of `latest.md` | `test_holdout_cases_are_summarized_apart_and_never_mixed_into_the_main_metrics`, `test_rows_of_holdout_cases_are_marked` |
+| F51 | Judge calibration: `eval/calibration/export.py` writes a labels CSV from a run; `agreement.py` computes pass/fail agreement, Cohen's kappa, confusion matrix and MAE per dimension | `tests/test_calibration.py` |
 
 ## 3. Non-functional requirements
 

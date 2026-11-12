@@ -2,7 +2,9 @@
 
 A small multi-agent assistant for Getnet customers. A router reads the message and decides who answers: a knowledge agent (Getnet website via RAG, or the web) and/or a support agent (the customer's own account data). If nobody can solve it, a human takes over. There's also an offline evaluator that scores the whole thing.
 
-Stack: LangGraph, Groq (`gpt-oss-120b` for knowledge, `gpt-oss-20b` for the rest, `qwen3.8-27b` as judge), Voyage embeddings, Chroma, Tavily, FastAPI, Docker.
+Stack: LangGraph, `gpt-oss` models on Groq or Fireworks (`AGENT_PROVIDER`; the delivered runs of 2026-11-12 use Fireworks `gpt-oss-120b` for every agent), `qwen3.8-27b` on Groq as judge, Voyage embeddings, Chroma, Tavily, FastAPI, Docker.
+
+For the reviewer of V4: [docs/V4_REMEDIATION.md](docs/V4_REMEDIATION.md) maps every point of the review to commits, tests and reports.
 
 Demo video: https://youtu.be/bnBYBmf2AlQ
 
@@ -206,33 +208,72 @@ Every record that is not in the queue yet comes in as `pending` with its old dat
 ## Tests and evaluation
 
 ```bash
-pytest -q                            # 399 tests, no network or keys needed (also: pytest -m "not eval")
+pytest -q                            # 455 tests, no network or keys needed (also: pytest -m "not eval")
 docker compose run --rm eval         # full evaluation (needs keys + KB)
 python -m eval.run_eval --only q05   # just some cases
 ```
 
 The tests cover tools, router, ingestion, the API, authentication (valid, expired, forged, wrong scope or role, cross-customer attempts), the operator queue (claim/reply races, idempotency, who sees what), handoff and the graph itself (real graph, stub agents). One test inspects the schema of every tool and fails if any exposes a parameter that selects a user (`user_id`, `customer`, `account`...), so the model can never choose whose data is read.
 
-The evaluation has 22 cases: 17 single-turn ones (10 from the challenge + extras + 3 handoff cases) and 5 multi-turn follow-ups (`m01`-`m05`, added 2026-11-12; their earlier turns are given as context, see `history` in `eval/dataset.jsonl`). The numbers reported below for the full run are from the 17 single-turn cases, before the multi-turn ones existed. Each one checks routing, tool use and handoff, and an LLM judge (different model family) scores relevance, groundedness, completeness and tone. Reports go to `eval/reports/latest.md`.
+The evaluation has 27 cases: 17 single-turn ones (10 from the challenge + extras + 3 handoff cases), 5 multi-turn follow-ups (`m01`-`m05`; their earlier turns are given as context, see `history` in `eval/dataset.jsonl`) and 5 blind holdout cases (`ho01`-`ho05`, summarized apart). Each one checks routing, tool use and handoff, and an LLM judge (different model family) scores relevance, groundedness, completeness and tone. Reports go to `eval/reports/latest.md`.
 
 **Provider errors are not verdicts.** A per-minute rate limit is waited out and the case retried (`--retries`, default 2). A daily quota is never retried. If a case still ends with a rate limit, an exhausted quota or an outage (in the router, an agent or the synthesizer), it is marked `error`, skipped by the judge and left out of every metric, and the report lists it so it can be re-run (`--only <id>`). A run with provider errors, or a partial run (`--only`), does not overwrite `latest.md`. Model failures (e.g. a broken tool call) still count against the system. Every report states which model ran each role.
+
+### Holdout, repeats and judge calibration
+
+- **Holdout.** `ho01`-`ho05` (`"holdout": true` in `eval/dataset.jsonl`) were written on 2026-11-12, before any prompt change, and are never used to tune a prompt: a Getnet product no other case asks about (Get Tap), Support for a third customer (`cliente3030`), a mixed Support + Knowledge case, an explicit request for a person in Spanish and an out-of-scope request. They run with the rest, but the report summarizes them apart (section "Holdout"), so the main metrics stay comparable with earlier reports.
+- **Repeats.** Repeated runs of the cases that carry the security and handoff decisions (`x04`, `h01`-`h03`) and of `q08` are in `eval/reports/REPEATS-20261112.md`. There is no `--repeats` option and no variance report of the whole eval (see `docs/V4_REMEDIATION.md`).
+- **Judge calibration (human labels).** The judge is an LLM, so its verdicts need a human check:
+
+  ```bash
+  python -m eval.calibration.export                      # newest eval/reports/<stamp>.json -> eval/calibration/labels_template.csv
+  # copy it to eval/calibration/labels.csv and fill human_grounded, human_complete (1-5), human_pass (yes/no), notes
+  python -m eval.calibration.agreement eval/calibration/labels.csv -o eval/reports/CALIBRATION-<date>.md
+  ```
+
+  `agreement` reports pass/fail agreement, Cohen's kappa, the 2x2 confusion matrix (judge vs human) and the mean absolute error of groundedness and completeness, in pure Python; unlabeled rows are skipped. The template of the final run is committed; **the human labels are not done yet** (they need a person), so there is no agreement number yet.
+- **Judge self-agreement** (judging the same answers 3 times) is not done: `run_eval` does not store the evidence the judge saw, so re-judging saved answers needs a change in what the report keeps. Pending, see `docs/V4_REMEDIATION.md`.
 
 ### Models per role
 
 | Variable | Role | Default |
 |---|---|---|
+| `AGENT_PROVIDER` | Provider of every agent: `groq` (ChatGroq, `GROQ_API_KEY`) or `fireworks` (Fireworks' OpenAI-compatible API through `langchain-openai`, `FIREWORKS_API_KEY`, `reasoning_effort` sent as a body field). The judge is always Groq | `groq` |
 | `LLM_MODEL` | Knowledge agent | `openai/gpt-oss-120b` |
 | `LIGHT_MODEL` | Router, Synthesizer | `openai/gpt-oss-20b` |
 | `SUPPORT_MODEL` | Support agent | empty = same as `LIGHT_MODEL` (`.env.example` sets `openai/gpt-oss-120b`) |
 | `JUDGE_MODEL` | Eval judge (a different model family) | `qwen/qwen3.8-27b` |
 
+With `AGENT_PROVIDER=fireworks` the model variables take Fireworks ids. The account used on 2026-11-12 serves only `accounts/fireworks/models/gpt-oss-120b` (the 20b answers 404 "Model not found"), so `LLM_MODEL`, `LIGHT_MODEL` and `SUPPORT_MODEL` are all that model there. The agents moved to Fireworks because Groq's paid Developer plan was not available and the free tier's 200K tokens per day per model cannot hold a full eval plus repeats.
+
 They come from `.env`, `docker-compose.yml` passes them to the containers, and one run can override them: `LIGHT_MODEL=openai/gpt-oss-120b docker compose run --rm eval`. Groq's free tier limits tokens per model (gpt-oss: 8K per minute, 200K per day), so roles that share a model share one quota. That is why the light roles are on a different model than Knowledge. Support is the exception: the 20b often skips `get_recent_transactions` on a decline (`q08`), so the delivered `.env.example` runs it on the 120b, which shares its quota with Knowledge.
 
 ### Latest full report
 
-`eval/reports/latest.md` (2026-11-12): **all 17 cases**, no provider errors, in the delivered configuration (Knowledge and Support on `gpt-oss-120b`, Router and Synthesizer on `gpt-oss-20b`, judge `qwen3.8-27b`). Routing 100%, tool use 100%, handoff accuracy 100%, judge pass rate 100%, groundedness 93%, completeness 94%, latency p50 4.2 s and p95 8.6 s. It is one run and the judge is not ground truth, so read the small differences as noise. A stable copy is `eval/reports/BASELINE-FULL-DELIVERED-20261112-092550.md`. It replaces the 2026-11-09 report, which had 14 cases and no handoff case.
+`eval/reports/latest.md` (2026-11-12, agents on Fireworks `gpt-oss-120b`, judge `qwen3.8-27b` on Groq): **all 27 cases**, no provider errors.
 
-### Re-evaluation after the authentication change (2026-11-11 and 2026-11-12)
+| | regular (22) | holdout (5) |
+|---|---|---|
+| Routing | 95% (`m03` sent to Knowledge) | 80% (`ho02` added Knowledge) |
+| Tool use | 100% | 100% |
+| Handoff accuracy | 95% (`x04` false positive) | 100% |
+| Groundedness / completeness | 95% / 87% | 88% / 92% |
+| Judge pass rate | 86% (`q05`, `m01`, `m05` fail) | 80% (`ho03` fails) |
+| Latency p50 / p95 | 3.7 s / 12.3 s | 3.7 s / 13.1 s |
+
+Tokens: 138.6K on the agents (102 calls, 5.1K per turn on average) and 58.5K on the judge; estimated cost $0.026 for the agents and $0.058 for the judge at list prices. A stable copy is `eval/reports/BASELINE-FIREWORKS-FULL-20261112-131428.md`; the previous full report (17 cases on Groq: routing, tools, handoff and judge 100%, groundedness 93%, completeness 94%) is `BASELINE-FULL-DELIVERED-20261112-092550.md`. It is one run and the judge is not ground truth: the per-case reasons are at the end of the report.
+
+### Re-evaluation after the move to Fireworks (2026-11-12)
+
+The Groq baselines are a reference, not the criterion. The acceptance criteria for the provider change were: `x04` refuses, `h01`-`h03` hand off and `q08` calls `get_recent_transactions` in every run, routing at least 95%, no provider errors. All hold (`eval/reports/REPEATS-20261112.md`, the full run plus 3 repeats of those five cases):
+
+- `x04` never called a data tool (4 of 4). But it now **always** escalates to a human (4 of 4, it was 1 of 5 on Groq): a false alarm for the queue, not a leak. Not fixed, see Limitations.
+- `h01`-`h03` hand off 4 of 4; `q08` calls `get_recent_transactions(status="declined")` 4 of 4. Smoke test before the move: `BASELINE-FIREWORKS-SMOKE-20261112.md`.
+- With the Router on the 120b (it was the 20b on Groq), the recall follow-ups `m01` and `m02` now get an empty plan (they went to Knowledge 12 of 12 on Groq); `m03` (rephrase) still goes to Knowledge. `m01` then fails the judge: the synthesizer said it does not keep personal preferences instead of reading the earlier turn.
+- Where it got worse: completeness 94% → 87% and judge pass rate 100% → 86% on the regular cases, mostly the multi-turn cases that did not exist in the 17-case report (`m01`, `m05`) and `q05`, which invented Wi-Fi details again (it also failed 1 of 5 runs on Groq). The Router on the 120b also labels the language of an English message as Portuguese when it contains Portuguese words (`x04` "cliente2024", `ho03` "receivables advance"), so `ho03` was answered in Portuguese.
+- No prompt was changed for this; the numbers are what the provider and model change did.
+
+### Re-evaluation after the authentication change (2026-11-11 and 2026-11-12, on Groq)
 
 **2026-11-11.** Nine Support/handoff cases (`q03 q05 q08 x01 x03 x04 h01 h02 h03`), one run each, so small differences are noise. Reports: `eval/reports/BASELINE-*.md`.
 
@@ -336,9 +377,11 @@ Every `/chat` turn is measured without touching a prompt or a node: `ChatService
 - Customer data is fake.
 - The handoff queue has an API (see "Human oversight") but no operator UI, no notification when a case arrives, so "a human will follow up" is only as true as somebody polling `/operator/handoffs`. A real setup needs Slack/Teams/helpdesk behind `HandoffNotifier`. The path from a real agent's handoff to the queue, and what the real LLM does with an operator's reply in its context, are tested with stub agents and a recording fake LLM, not yet with the real one (`docs/VERIFICATION_DEBT.md`, items 11 and 12).
 - Whether an agent escalates is the LLM's call, so it can miss sometimes.
-- With `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). `SUPPORT_MODEL=openai/gpt-oss-120b` (the delivered setting) avoids it (4 of 4 runs), at the cost of 120b quota, which Knowledge shares: a day of testing can use it up, and then the agents degrade and hand cases to a human.
-- Follow-up questions that only refer to the conversation ("what did I tell you?", "which of the two is bigger?") are routed to Knowledge, which cannot answer them (it escalates or says it has no record). Measured with the multi-turn cases `m01`-`m05`: the 3 that need no agent (recall, rephrase) were routed to Knowledge in 12 of 12 calls (3 repetitions of the Router alone plus the one end-to-end run that completed), the 2 follow-ups that do need an agent were routed correctly (8 of 8). It is not a memory problem: the conversation reaches the Router and every agent (`tests/test_followup_context.py`). It is the Router prompt, which has no example of a question about the conversation itself. Not fixed yet; details in `eval/reports/BASELINE-MULTITURN-20261112.md`.
-- **Handoff false positive in `x04`.** With Support on the 120b, `x04` (a customer asks for another customer's transactions) refused without calling any data tool in 5 of 5 runs, so the security behavior held. But in 1 of those 5 runs the agent also called `escalate_to_human` ("User requested data for a different customer ID") and the case was handed to a human, while the case expects no handoff. It is a false alarm for the operator queue, not a data leak. It is not fixed: the way to remove it is a Support prompt change, and the Support prompt is not touched without measuring it again (removing the customer id from it already made `x04` fail in 5 of 5 runs, see "Who is calling comes only from the token").
+- On Groq with `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). `SUPPORT_MODEL=openai/gpt-oss-120b` (the delivered setting) avoids it (4 of 4 runs), at the cost of 120b quota, which Knowledge shares: a day of testing can use it up, and then the agents degrade and hand cases to a human.
+- Follow-up questions that only refer to the conversation ("what did I tell you?", "say that again more simply"). On Groq (Router on the 20b) the 3 that need no agent (`m01`-`m03`) were routed to Knowledge in 12 of 12 calls, which cannot answer them; on Fireworks (Router on the 120b) `m01` and `m02` get an empty plan and `m03` still goes to Knowledge, and `m01` is still answered badly (the synthesizer says it keeps no preferences) and `m05` repeats the earlier payout. It is not a memory problem: the conversation reaches the Router and every agent (`tests/test_followup_context.py`). The fix is a rule and an example in the Router prompt; it was left out of this delivery on purpose (Router not touched) and stays a known limitation. Details: `eval/reports/BASELINE-MULTITURN-20261112.md` and `latest.md`.
+- With the Router on `gpt-oss-120b`, an English message that contains Portuguese words can be labelled Portuguese, and the answer comes in Portuguese (`ho03`, and the `x04` handoff notice in the smoke test).
+- The Knowledge agent sometimes puts customer details it got from Support into its KB search query (`ho02`: bank and branch). The query is embedded by Voyage, an external API, so those details leave the system in the query. Not fixed (a Knowledge prompt change).
+- **Handoff false positive in `x04`.** `x04` (a customer asks for another customer's transactions) refused without calling any data tool in 5 of 5 runs on Groq and 4 of 4 on Fireworks, so the security behavior held. But the agent also called `escalate_to_human` in 1 of 5 runs on Groq and in **4 of 4 on Fireworks** ("User requested data for a different customer ID") and the case was handed to a human, while the case expects no handoff. It is a false alarm for the operator queue, not a data leak. It is not fixed: the way to remove it is a Support prompt change, and the Support prompt is not touched without measuring it again (removing the customer id from it already made `x04` fail in 5 of 5 runs, see "Who is calling comes only from the token").
 - `qwen/qwen3.8-27b` works as the judge but not as an agent: it fails with "Request too large ... output tokens per minute" because the agents do not set `max_tokens`.
 - The KB is only as good as the crawl. There's little troubleshooting content, so those answers are generic. Adding help-center URLs to `app/rag/sources.py` would help the most.
 - The LLM judge isn't ground truth, so spot-check the answers.

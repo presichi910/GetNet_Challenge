@@ -1,7 +1,7 @@
 # CONTEXTO.md — GetNet Multi-Agent Support System
 
 Fuente única de contexto para cualquier sesión nueva (Claude Code o chat). Sustituye a `PASO2_CONTEXTO.md`, `docs/CONTEXT_FOR_NEW_CHAT.md`, `contexto_p1.md` y `Contexto_p4.md`.
-Instantánea: **2026-11-12**. El repo avanza más rápido que este archivo: **antes de actuar, verifica con `git status`, `git log origin/main..HEAD --oneline` y `pytest`**. Este archivo no contiene secretos. Nunca leas ni edites `.env`.
+Instantánea: **2026-11-12 (tarde, tras la sesión de remediación V4)**. El repo avanza más rápido que este archivo: **antes de actuar, verifica con `git status`, `git log origin/main..HEAD --oneline` y `pytest`**. Este archivo no contiene secretos. Nunca leas ni edites `.env`.
 
 ---
 
@@ -43,7 +43,7 @@ Prioridades de evolución del revisor: 1 JWT/OIDC · 2 `conversation_id` ≠ `us
 ## 3. Matriz feedback → estado
 
 Leyenda: ✅ hecho · 🟡 a medias (hecho en código, falta evidencia o visibilidad) · ❌ falta.
-"Visible en GitHub" = está en `origin/main` (`022c38a`). Lo marcado como **local** está en commits sin push y el revisor **no lo ve**.
+"Visible en GitHub" = está en `origin/main` (`022c38a`). **Todo lo de la sesión del 2026-11-12 está en commits locales sin push** (ver §12): hasta el push el revisor no lo ve. `docs/V4_REMEDIATION.md` es el cruce para el revisor.
 
 | # | Punto del feedback | Estado | Evidencia / qué falta |
 |---|---|---|---|
@@ -55,17 +55,17 @@ Leyenda: ✅ hecho · 🟡 a medias (hecho en código, falta evidencia o visibil
 | 6 | Resumen rodante | ✅ visible / 🟡 sin LLM real | Nodo `summarize` (`app/agents/summarizer.py`), `SUMMARY_THRESHOLD=12`, `RemoveMessage`, nunca rompe el turno. Falta deuda 8 (qué escribe el LLM real, `x04` con resumen presente, ruta de timeout). |
 | 7 | Retención / privacidad de memoria | ✅ visible | TTL, `MAX_THREADS_PER_USER` (429), `secure_delete` + truncado del WAL, una fila de checkpoint por hilo. Deuda 9 opcional (sin tokens). |
 | 8 | HITL operador: claim/reply/approve/reject/resume | ✅ visible / 🟡 sin LLM real | `app/handoff_store.py` (cola SQLite, exactamente-una-vez por SQL, leases, idempotencia), `/operator/*`, rol `operator`, la respuesta del operador entra al contexto como `[Operador humano]`. Falta deuda 11–13, y la 12 es la más sensible (tratarla como cambio de prompt, correr `x04`). |
-| 9 | Reporte versionado con los 17 casos | 🟡 **local** | En GitHub `eval/reports/latest.md` sigue siendo el de 14 filas (2026-11-09, sin `h01–h03`). Según los chats previos, el reporte de 17 casos (routing/tools/handoff/juez 100%, groundedness 93%, completitud 94%, p50 4,2 s, p95 8,6 s) está en commits locales sin push. **Hay que hacer push.** |
+| 9 | Reporte versionado con todos los casos | ✅ local | `latest.md` con los 27 casos en Fireworks (22 regulares + 5 holdout), 0 errores, tokens y costo (`8ecfe29`). Copia: `BASELINE-FIREWORKS-FULL-20261112-131428.md`. El de 17 casos en Groq queda como `BASELINE-FULL-DELIVERED-20261112-092550.md`. **Falta push.** |
 | 10 | Docker no-root | ✅ visible | `Dockerfile` con `USER app` (uid 10001), código de solo lectura, volumen nombrado `data`. |
 | 11 | CI | 🟡 | `.github/workflows/ci.yml` (pytest en 3.12 + build + chequeo uid 10001) existe en `origin/main`, pero **nadie ha visto una ejecución verde en GitHub**. |
-| 12 | Tracing, tokens, costo, dashboards, alertas | ❌ | Solo hay `trace_id`, latencia y un log `key=value` por request (`app/service.py`). El eval no registra tokens. README: "Not done: guardrails, tracing/dashboards". **Es el bloque más grande que falta (paso 5).** |
-| 13 | Calibración humana del juez | ❌ | No hay etiquetas humanas ni métrica de acuerdo. Requiere que el usuario etiquete casos. |
-| 14 | Corridas repetidas sistemáticas | 🟡 | Hay repeticiones puntuales (`q05` ×3, `q08` ×4, `x04` ×5, `BASELINE-REPEATS-20261112.md`, local), no un reporte de varianza del eval completo. |
-| 15 | Acuerdo del juez / holdout ciego | ❌ | Un solo juez (`qwen/qwen3.8-27b`). Sin holdout. |
-| 16 | Replanificación adaptativa | ❌ por decisión | El usuario defiende "plan first, then run" (README línea ~199). Falta un argumento escrito con evidencia (qué mediría para cambiarlo). |
-| 17 | RAG híbrido + métricas de retrieval | ❌ | Solo denso (Voyage + Chroma, máx. 2 PDFs). Sin recall@k, MRR ni nDCG. |
-| 18 | Seguimientos sobre la propia conversación ("¿qué te dije?") | 🟡 | No lo citó el revisor, pero afecta a la memoria percibida: el Router manda `m01–m03` a Knowledge (0/3 cada uno, 12/12 en total); `m04–m05` aciertan 8/8. La memoria funciona (`tests/test_followup_context.py`); el fallo está en el prompt del Router. Decisión pendiente: (a) arreglar el prompt y medir o (b) dejarlo como limitación. |
-| 19 | Falso positivo de `x04` (1 de 5 escala a humano) | 🟡 documentado | Rechaza bien 5/5; arreglarlo exige tocar el prompt de Support (prohibido sin medir). Se deja como limitación. |
+| 12 | Tracing, tokens, costo, dashboards, alertas | ✅ local / ❌ dashboards | `app/observability.py` (`4f65d35`): callback por request, tokens y costo por nodo y modelo, `traces.sqlite` sin texto (se borra con DELETE y TTL), `usage` en `/chat`, `GET /operator/metrics`, líneas `ALERT`, tokens y costo en la eval. Sin dashboards visuales ni OTel. |
+| 13 | Calibración humana del juez | 🟡 | Herramienta hecha (`eval/calibration/export.py`, `agreement.py`, `aff8351`) y plantilla de la corrida final commiteada. **Faltan las etiquetas humanas** (las pone el usuario). |
+| 14 | Corridas repetidas sistemáticas | 🟡 | `REPEATS-20261112.md`: `x04`, `h01–h03`, `q08` ×4 en Fireworks. Sin `--repeats` ni varianza de la eval completa (T2b, fuera de plazo). |
+| 15 | Acuerdo del juez / holdout ciego | 🟡 | Holdout `ho01–ho05` hecho (`63d4b85`; routing 80%, juez 80%). Autoacuerdo del juez no hecho (T2d: el reporte no guarda la evidencia que vio el juez). |
+| 16 | Replanificación adaptativa | ❌ por decisión | Defensa escrita con costo medido y criterio de cambio en `docs/V4_REMEDIATION.md` ("Plan first, then run"). |
+| 17 | RAG híbrido + métricas de retrieval | ❌ | Fuera del plazo (D5/T4). Solo denso. |
+| 18 | Seguimientos sobre la propia conversación ("¿qué te dije?") | 🟡 limitación (D2) | Router no tocado. En Fireworks (Router en 120b) `m01` y `m02` ya van con plan vacío y `m03` sigue a Knowledge; `m01` y `m05` fallan el juez. Documentado en README Limitations. |
+| 19 | Falso positivo de `x04` | 🟡 documentado | En Fireworks escala **4/4** (en Groq 1/5); nunca llama tools de datos (4/4). Arreglarlo exige tocar el prompt de Support. |
 | 20 | Video de entrega actualizado | ❌ (usuario) | El enunciado pide video ≤ 15 min. |
 
 ## 4. Arquitectura
@@ -94,12 +94,13 @@ POST /chat (JWT) -> [summarize] -> router -> {support | knowledge}* -> synthesiz
 | `app/graph.py`, `app/state.py` | Grafo y estado (el router resetea los campos por turno) |
 | `app/agents/` | `router`, `knowledge`, `support`, `synthesizer`, `summarizer`, `common` (`recent_dialogue`) |
 | `app/prompts.py` | Todos los prompts (**frágiles**, ver §5) |
-| `app/llm.py` | `get_llm()` → `ChatGroq` |
+| `app/llm.py` | `get_llm()` → ChatGroq o ChatOpenAI/Fireworks según `AGENT_PROVIDER`; `get_judge_llm()` siempre Groq |
+| `app/observability.py` | `TurnCollector` (callback), precios, `TraceStore` (`traces.sqlite`), métricas |
 | `app/memory.py` | SqliteSaver, tabla `threads`, TTL, límite, prune, `secure_delete` |
 | `app/handoff.py`, `app/handoff_store.py` | Nodo handoff, notificadores, cola SQLite |
 | `app/rag/` | `sources`, `ingest`, `store` |
 | `app/tools/` | `customer_tools`, `knowledge_tools`, `handoff_tools` |
-| `eval/` | `run_eval.py`, `judge.py`, `dataset.jsonl`, `reports/` |
+| `eval/` | `run_eval.py`, `judge.py`, `dataset.jsonl` (27 casos), `reports/`, `calibration/` (`export.py`, `agreement.py`, `labels_template.csv`) |
 | `scripts/issue_token.py` | JWT de demo |
 | `docs/SPEC.md` | Requisitos F1–F41 / N1–N7 con su check |
 | `docs/VERIFICATION_DEBT.md` | Verificación pendiente con LLM real (items 1–13; 1–6 cerrados en local) |
@@ -109,6 +110,7 @@ POST /chat (JWT) -> [summarize] -> router -> {support | knowledge}* -> synthesiz
 - `GET /health` (público).
 - `POST /chat` (rol merchant, scope `chat`): `{message, user_id?, conversation_id?}`. La respuesta incluye `routing`, `agents_used`, `tool_calls`, `degraded`, `handoff`, `latency_ms`, `trace_id`, `operator_messages`, `open_handoffs`.
 - `GET /conversations`, `GET /conversations/{id}`, `DELETE /conversations/{id}` (204), `GET /conversations/{id}/operator-messages`.
+- `GET /operator/metrics?since=&until=` (operador): requests, p50/p95, tasas, errores de proveedor, tokens y costo por nodo y modelo. `/chat` devuelve además `usage`.
 - `GET /operator/handoffs`, `GET /operator/handoffs/{id}`, `POST .../claim`, `POST .../reply {decision, message, idempotency_key}`, `POST .../reject {reason, close}`.
 - Códigos: 401 token inválido, 403 scope/rol/`user_id` ajeno, 404 ajeno o inexistente (mismo cuerpo), 409 conflicto de claim/lease/idempotencia, 429 límite de hilos.
 
@@ -118,7 +120,9 @@ Python 3.12 (imagen y CI) / 3.13 (`.venv` local), FastAPI, LangGraph 1.2.20 (Sta
 
 ### Variables de entorno (nombres; valores en `.env`, nunca en el repo)
 
-- Claves: `GROQ_API_KEY`, `TAVILY_API_KEY`, `VOYAGE_API_KEY`.
+- Claves: `GROQ_API_KEY` (juez siempre; agentes si `AGENT_PROVIDER=groq`), `FIREWORKS_API_KEY`, `TAVILY_API_KEY`, `VOYAGE_API_KEY`.
+- Proveedor: `AGENT_PROVIDER=groq|fireworks` (default groq). En Fireworks la cuenta solo sirve `accounts/fireworks/models/gpt-oss-120b`: `LLM_MODEL`, `LIGHT_MODEL` y `SUPPORT_MODEL` deben ser ese ID.
+- Observabilidad: `TRACES_DB_PATH`, `MODEL_PRICES_JSON`, `MAX_TURN_TOKENS`=30000, `MAX_TURN_COST_USD`=0.02.
 - Auth: `JWT_SECRET` (≥ 32 caracteres, sin patrón de plantilla), `JWT_ISSUER`, `JWT_AUDIENCE`.
 - Modelos: `LLM_MODEL` (120b), `LIGHT_MODEL` (20b), `SUPPORT_MODEL` (`.env.example` = `openai/gpt-oss-120b`), `JUDGE_MODEL` (`qwen/qwen3.8-27b`), `REASONING_EFFORT`.
 - Memoria: `CHECKPOINT_DB_PATH`, `SUMMARY_THRESHOLD`=12, `HISTORY_WINDOW`=6, `SUMMARY_TIMEOUT_SECONDS`=20, `THREAD_TTL_DAYS`=30, `PURGE_INTERVAL_MINUTES`=60, `MAX_THREADS_PER_USER`=20.
@@ -142,24 +146,23 @@ Python 3.12 (imagen y CI) / 3.13 (`.venv` local), FastAPI, LangGraph 1.2.20 (Sta
 
 ## 6. Lo que ya funciona (con evidencia)
 
-- 408 tests en verde con `pytest -m "not eval"` según los chats previos; 25 archivos en `tests/`; sin red ni claves.
-- Eval: 22 casos en local (17 de un turno: 10 del reto + extras + 3 de handoff; 5 multi-turno `m01–m05`). En GitHub hay 17. Mide routing, tools, handoff, latencia, tasa de degradados y un juez de otra familia (relevancia, groundedness, completitud, tono) que recibe la evidencia real de los agentes. Un error de proveedor se marca `error`, no cuenta y nunca pisa `latest.md`; una corrida parcial (`--only`) tampoco.
-- Evidencia local: `latest.md` (17 casos), `BASELINE-FULL-DELIVERED-20261112-092550.md`, `BASELINE-HEAD-DEFAULT-SUBSET-20261112-092912.md`, `BASELINE-BAB3729-VS-HEAD-SUBSET-20261112.md`, `BASELINE-REPEATS-20261112.md`, `BASELINE-MULTITURN-20261112.md`.
-- Docker verificado el 2026-11-12: uid 10001, Support con tools para dos clientes sin cruce, rechazo de datos ajenos, handoffs en el volumen, eval dentro del contenedor.
+- **455 tests** en verde con `pytest -m "not eval"` (2026-11-12), sin red ni claves.
+- Eval: 27 casos (17 de un turno, 5 multi-turno `m01–m05`, 5 holdout `ho01–ho05` resumidos aparte). Mide routing, tools, handoff, latencia, degradados, juez de otra familia, y **tokens y costo** por caso y por modelo.
+- Corrida final en Fireworks (`latest.md`, 0 errores): regulares routing 95%, tools 100%, handoff 95%, groundedness 95%, completitud 87%, juez 86%; holdout routing 80%, juez 80%. 138,6K tokens de agentes + 58,5K del juez ≈ $0,084.
+- Criterios del cambio de proveedor cumplidos (`REPEATS-20261112.md`): `x04` sin tools de datos 4/4, `h01–h03` handoff 4/4, `q08` con `get_recent_transactions` 4/4.
+- Observabilidad (`4f65d35`), holdout (`63d4b85`), calibración (`aff8351`), Fireworks (`ac6e4e0`).
+- Docker verificado el 2026-11-12 por la mañana (antes de la observabilidad): uid 10001, Support con tools para dos clientes sin cruce. La verificación de T8 de la tarde está en el reporte final de la sesión.
 
 ## 7. Lo que falta
 
-1. **Push** de los commits locales (reporte de 17 casos, deuda 1–6 cerrada, `m01–m05`, docs) y ver el CI verde en GitHub.
-2. **Observabilidad (paso 5)**: tokens y costo por agente/modelo/turno, trazas persistentes por nodo, métricas agregadas, alerta mínima.
-3. **Evaluación**: holdout, corridas repetidas con varianza, herramienta de calibración humana (+ etiquetas del usuario), acuerdo del juez.
-4. **Verificación con LLM real**: deuda 7–13 de `docs/VERIFICATION_DEBT.md`.
-5. **Router y seguimientos conversacionales** (`m01–m03`), si el usuario elige arreglarlo.
-6. **RAG**: métricas de retrieval y, opcionalmente, híbrido BM25 + RRF.
-7. **Documento para el revisor** que cruce cada punto del feedback con commits, tests y reportes.
-8. **Docs al día**: README (cuenta de tests 399 → real, Limitations, Re-evaluation), `docs/SPEC.md`, `docs/VERIFICATION_DEBT.md`.
-9. **Video ≤ 15 min** y re-entrega (lo hace el usuario).
+1. **Push** de los commits locales y ver el CI verde en GitHub.
+2. Poner en `.env`: `LIGHT_MODEL=accounts/fireworks/models/gpt-oss-120b` (Fireworks no sirve el 20b).
+3. **Etiquetas humanas** en `eval/calibration/labels_template.csv` y correr `agreement.py`.
+4. Pendiente, fuera del plazo de entrega: deuda 7–13 con LLM real (T5), métricas de RAG y BM25/RRF (T4), `--repeats` con varianza (T2b), autoacuerdo del juez (T2d), regla del Router para seguimientos (T3, decidido no tocar el Router).
+5. Limitaciones nuevas documentadas: `x04` escala 4/4 en Fireworks; el Router en 120b marca como portugués mensajes en inglés con palabras en portugués; Knowledge mete datos del cliente en la consulta a la KB (`ho02`, sale a Voyage).
+6. **Video ≤ 15 min** y re-entrega (lo hace el usuario).
 
-Riesgos conocidos que se quedan documentados (no los pidió el feedback): `tickets.jsonl` guarda 200 caracteres de la petición fuera de DELETE/TTL; sin cifrado en reposo; auth demo HS256 (en producción haría falta IdP RS256/JWKS, refresh, revocación y rate limiting); sin UI de operador ni notificaciones; un solo worker; un reintento tras fallo puede duplicar el mensaje del operador en el hilo; el 20b manda `{'': ''}` a tools sin argumentos.
+Riesgos conocidos que se quedan documentados (no los pidió el feedback): `tickets.jsonl` guarda 200 caracteres de la petición fuera de DELETE/TTL; sin cifrado en reposo; auth demo HS256 (en producción haría falta IdP RS256/JWKS, refresh, revocación y rate limiting); sin UI de operador ni notificaciones; un solo worker; un reintento tras fallo puede duplicar el mensaje del operador en el hilo; el 20b manda `{'': ''}` a tools sin argumentos. Las pruebas de humo de D1 (antes de redirigir `TICKETS_FILE`/`HANDOFFS_FILE`) añadieron unas líneas de eval a `data/tickets.jsonl` y `data/handoffs.jsonl`.
 
 ## 8. Cómo correr y probar
 
@@ -175,7 +178,7 @@ python -m scripts.issue_token --role operator --operator ops1
 docker compose build && docker compose up -d          # :8000, volumen data
 docker compose run --rm ingest                        # reconstruye la KB (Voyage/Tavily, gasta cuota)
 
-# Eval (GASTA CUOTA del LLM; requiere GROQ_API_KEY como variable de entorno)
+# Eval (GASTA CUOTA/DINERO; agentes en AGENT_PROVIDER, juez en Groq). Redirige TICKETS_FILE y HANDOFFS_FILE fuera de ./data
 python -m eval.run_eval --only q05 --pause 25 --retries 3   # parcial, no pisa latest.md
 python -m eval.run_eval --pause 25 --retries 3              # completa; pisa latest.md si no hay errores
 git checkout eval/reports/latest.md                          # restaurar tras una corrida que no se quiera guardar
@@ -187,10 +190,9 @@ git checkout eval/reports/latest.md                          # restaurar tras un
 
 ## 9. Cuota y costo del LLM
 
-- Plan gratuito de Groq: por modelo **8.000 tokens/min y 200.000/día**; Knowledge y Support comparten el bucket del 120b. Un día de pruebas lo agota y los agentes degradan (comportamiento diseñado, pero invalida las mediciones).
-- Consumo de una corrida de 17 casos (chats previos): ~56,7K tokens en el 120b, ~18,8K en el 20b, ~26K en el juez.
-- Una llamada pequeña que pasa no prueba margen diario. Si el router da 429, la app cae a Knowledge y gasta el 120b. **Nunca bucles A/B en el plan gratuito.**
-- En el plan Developer (pago por uso) los mismos modelos no tienen tope diario y el límite por minuto sube mucho; no requiere cambios de código.
+- Agentes en **Fireworks** (pago por uso): una corrida de 27 casos ≈ 138,6K tokens de agentes ($0,026) + 58,5K del juez ($0,058, Groq `qwen3.8-27b` a $0,80/$4,00 por 1M). Un turno medio ≈ 5,1K tokens ≈ $0,001.
+- El juez sigue en el plan gratuito de Groq (límites por modelo). Groq gratuito para los agentes: 8K tokens/min y 200K/día por modelo; un día de pruebas lo agota.
+- Precios en `app/observability.py` (fecha `PRICES_AS_OF`), corregibles con `MODEL_PRICES_JSON`; un modelo sin precio da costo null.
 
 ## 10. Reglas de trabajo con el usuario
 
@@ -214,8 +216,8 @@ git checkout eval/reports/latest.md                          # restaurar tras un
 - `data/handoffs.jsonl` local tiene ~85 líneas de pruebas viejas con extractos (en `.gitignore`); la importación está apagada por defecto.
 - Docker Desktop puede estar apagado: comprobar, no asumir.
 
-## 12. Estado de git (2026-11-12)
+## 12. Estado de git (2026-11-12, fin de la sesión)
 
 - `origin/main` = `022c38a`.
-- Commits locales sin push (según los chats previos): `f55a085`, `011c184`, `7e69060` (cierre deuda 1–6 + reporte 17 casos), `f48b5bb` (test historial turno 2), `2396958` (casos `m01–m05`), `2dbffca` (docs Router y `x04`).
-- Archivos de contexto sueltos sin commitear: `PASO2_CONTEXTO.md`, `docs/CONTEXT_FOR_NEW_CHAT.md` (y posiblemente `contexto_p1.md`, `Contexto_p4.md`). Este `CONTEXTO.md` los sustituye; borrarlos solo con permiso del usuario.
+- Commits locales sin push: los 6 de la mañana (`f55a085` … `2dbffca`) y los de la tarde: `867f8dd` (este archivo), `ac6e4e0` (Fireworks), `4f65d35` (observabilidad), `63d4b85` (holdout), `aff8351` (calibración), `8ecfe29` (eval final y repeticiones) y los de documentación que vienen después (ver `git log origin/main..HEAD`).
+- Los archivos de contexto viejos (`PASO2_CONTEXTO.md`, `Contexto_p4.md`, `docs/CONTEXT_FOR_NEW_CHAT.md`, `docs/contexto_p1.md`) se borraron con permiso del usuario. `CONTEXTO_GETNET.md` (raíz, sin seguimiento) es del usuario y no se tocó.
