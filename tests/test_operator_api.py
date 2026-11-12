@@ -177,18 +177,6 @@ def test_full_flow_create_list_claim_reply_and_the_customer_receives_it(client):
     assert [(x["message"], x["delivered"]) for x in got["messages"]] == [("Approved: we refunded the fee.", True)]
 
 
-def test_the_operator_message_never_enters_what_the_graph_sees(client):
-    """Not injected into the conversation history: the LLM sees exactly what it saw before this step."""
-    hid = open_case(client)
-    claim(client, hid)
-    reply(client, hid, message="SECRET-OPERATOR-TEXT")
-    chat(client, A, "thanks", "c1")
-    turn = chat(client, A, "one more", "c1")
-    assert "SECRET-OPERATOR-TEXT" not in turn["response"]  # the stub echoes every user message in the history
-    detail = client.get("/conversations/c1", headers=m(A)).json()
-    assert "SECRET-OPERATOR-TEXT" not in json.dumps(detail)
-
-
 def test_the_queue_is_oldest_first_and_the_status_filter_works(client):
     ids = [open_case(client, A, f"c{i}", "human please") for i in range(3)]
     claim(client, ids[1])

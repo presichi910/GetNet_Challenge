@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.handoff import defuse_label, operator_context_message
 from app.schemas import (DEFAULT_CONVERSATION, ChatResponse, HandoffInfo, OpenHandoff, OperatorMessage, Routing,
                          Source, ToolCall)
 
@@ -30,11 +31,13 @@ class ChatService:
         self.handoffs = handoffs
 
     def run_raw(self, message: str, user_id: str, thread_id: str | None = None,
-                conversation_id: str | None = None) -> tuple[dict, int]:
-        """Run the graph. Returns (state, latency_ms)."""
+                conversation_id: str | None = None, context: list | None = None) -> tuple[dict, int]:
+        """Run the graph. Returns (state, latency_ms). `context`: messages that go into the conversation
+        just before the customer's (an operator's reply). None or empty: the input is exactly what it
+        always was."""
         t0 = time.perf_counter()
         state = self.graph.invoke(
-            {"messages": [HumanMessage(content=message)], "user_id": user_id,
+            {"messages": [*(context or []), HumanMessage(content=message)], "user_id": user_id,
              "conversation_id": conversation_id or DEFAULT_CONVERSATION},
             config={"configurable": {"thread_id": thread_id or thread_id_for(user_id)}, "recursion_limit": 25},
         )
@@ -93,25 +96,42 @@ class ChatService:
         return [{**m, "created_at": self._iso(m["created_at"])}
                 for m in self.handoffs.messages_for_conversation(user_id, conversation_id)]
 
-    def _human_side(self, user_id: str, conversation_id: str, handoff: HandoffInfo | None):
-        """What the customer may learn about the humans: the status of this turn's handoff, the cases of
-        this conversation still open, and the operator messages not delivered yet (delivered now, once).
-        Every query is filtered by the token's user_id. A problem here never fails the turn: an
-        undelivered message simply stays undelivered and comes with the next one."""
+    def _take_operator_messages(self, user_id: str, conversation_id: str) -> list[dict]:
+        """The operator messages of this conversation not delivered yet, marked delivered in the same
+        transaction (two simultaneous turns cannot both take one). They go into the conversation the
+        agents read and into this turn's response. A problem here never fails the turn: nothing is
+        taken and the message comes with the next one."""
         if not self.handoffs:
-            return handoff, [], []
+            return []
+        try:
+            return self.handoffs.pop_undelivered(user_id, conversation_id)
+        except Exception:  # noqa: BLE001
+            log.warning("could not read operator messages for user=%s conv=%s", user_id, conversation_id, exc_info=True)
+            return []
+
+    def _give_back(self, user_id: str, conversation_id: str, taken: list[dict]) -> None:
+        """The turn failed: the messages it took were not delivered, so they are not marked delivered."""
+        try:
+            self.handoffs.restore_undelivered(user_id, conversation_id, [m["handoff_id"] for m in taken])
+        except Exception:  # noqa: BLE001 - still readable at /conversations/{id}/operator-messages
+            log.warning("could not give back operator messages for user=%s conv=%s", user_id, conversation_id, exc_info=True)
+
+    def _human_side(self, user_id: str, conversation_id: str, handoff: HandoffInfo | None):
+        """What the customer may learn about the humans: the status of this turn's handoff and the cases
+        of this conversation still open. Every query is filtered by the token's user_id. A problem
+        here never fails the turn."""
+        if not self.handoffs:
+            return handoff, []
         try:
             if handoff:
                 handoff = handoff.model_copy(
                     update={"status": self.handoffs.status_for(user_id, handoff.id) or handoff.status})
             open_cases = [OpenHandoff(**h) for h in self.handoffs.open_for_conversation(user_id, conversation_id)
                           if not handoff or h["id"] != handoff.id]
-            delivered = [OperatorMessage(**{**m, "created_at": self._iso(m["created_at"])})
-                         for m in self.handoffs.pop_undelivered(user_id, conversation_id)]
-            return handoff, open_cases, delivered
+            return handoff, open_cases
         except Exception:  # noqa: BLE001
             log.warning("could not read the handoff queue for user=%s conv=%s", user_id, conversation_id, exc_info=True)
-            return handoff, [], []
+            return handoff, []
 
     def handle(self, message: str, user_id: str, conversation_id: str | None = None) -> ChatResponse:
         """`user_id` must be the authenticated user. The memory thread is derived from it here."""
@@ -120,9 +140,13 @@ class ChatService:
         thread_id = thread_id_for(user_id, conversation_id)
         # raises ThreadLimitExceeded for a new thread above the per-user limit, before anything runs
         created = self.memory.begin_turn(user_id, thread_id) if self.memory else False
+        taken = self._take_operator_messages(user_id, conversation_id)
         try:
-            state, latency_ms = self.run_raw(message, user_id, thread_id, conversation_id)
+            state, latency_ms = self.run_raw(defuse_label(message), user_id, thread_id, conversation_id,
+                                             context=[operator_context_message(m) for m in taken])
         except Exception:
+            if taken:
+                self._give_back(user_id, conversation_id, taken)
             if created:  # the first turn of a thread failed: do not keep its slot or its leftovers
                 self.memory.abort_new_thread(thread_id)
             raise
@@ -143,8 +167,9 @@ class ChatService:
                     seen.add(s["url"])
                     sources.append(Source(**s))
 
-        handoff, open_handoffs, operator_messages = self._human_side(
+        handoff, open_handoffs = self._human_side(
             user_id, conversation_id, HandoffInfo(**state["handoff"]) if state.get("handoff") else None)
+        operator_messages = [OperatorMessage(**{**m, "created_at": self._iso(m["created_at"])}) for m in taken]
 
         resp = ChatResponse(
             response=state["final_answer"],

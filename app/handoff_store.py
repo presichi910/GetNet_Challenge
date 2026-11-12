@@ -393,6 +393,15 @@ class HandoffStore:
         return [{"handoff_id": r["handoff_id"], "decision": r["decision"], "message": r["body"],
                  "created_at": r["created_at"]} for r in rows]
 
+    def restore_undelivered(self, merchant_id: str, conversation_id: str, handoff_ids: list[str]) -> None:
+        """Undo `pop_undelivered` for these handoffs: the turn that was going to carry them failed."""
+        if not handoff_ids:
+            return
+        with self._tx() as c:
+            marks = ",".join("?" * len(handoff_ids))
+            c.execute(f"UPDATE operator_messages SET delivered_at = NULL WHERE merchant_id = ? AND conversation_id = ? "
+                      f"AND handoff_id IN ({marks})", (merchant_id, conversation_id, *handoff_ids))
+
     def messages_for_conversation(self, merchant_id: str, conversation_id: str) -> list[dict]:
         """All operator messages of the merchant's conversation, delivered or not. Read only."""
         rows = self._read("SELECT handoff_id, decision, body, created_at, delivered_at FROM operator_messages "

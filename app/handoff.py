@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -96,6 +97,23 @@ class FileQueueNotifier:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
         log.warning("HANDOFF id=%s reason=%s priority=%s user=%s ticket=%s",
                     record["handoff_id"], record["reason"], record["priority"], record["user_id"], record["ticket_id"])
+
+
+OPERATOR_LABEL = "[Operador humano]"
+
+
+def operator_context_message(m: dict) -> AIMessage:
+    """What an operator's reply looks like in the conversation the agents read: an assistant-side
+    message that starts with the label, so a model never takes it for its own words or the customer's.
+    It enters the graph as an ordinary message, so `recent_dialogue` carries it with no change."""
+    return AIMessage(content=f"{OPERATOR_LABEL} ({m['decision']}) {m['message']}",
+                     additional_kwargs={"source": "human_operator", "handoff_id": m["handoff_id"]})
+
+
+def defuse_label(text: str) -> str:
+    """A customer can type the label too. Only messages that really come from an operator may carry
+    it, so in the customer's own text it is turned into a visible quote. (Nothing else is touched.)"""
+    return re.sub(re.escape(OPERATOR_LABEL), "[cita: Operador humano]", text, flags=re.IGNORECASE)
 
 
 AUDIT_FIELDS = ("handoff_id", "created_at", "user_id", "conversation_id", "reason", "priority", "ticket_id", "language")
