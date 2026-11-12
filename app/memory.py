@@ -33,10 +33,11 @@ class ThreadLimitExceeded(Exception):
 
     def __init__(self, user_id: str, limit: int, ttl_days: int):
         self.user_id, self.limit, self.ttl_days = user_id, limit, ttl_days
-        expiry = f" or wait until old ones expire ({ttl_days} days without activity)" if ttl_days else ""
+        expiry = f", or wait until old ones expire ({ttl_days} days without activity)" if ttl_days else ""
         super().__init__(
             f"You already have {limit} conversations, which is the maximum. "
-            f"Continue one of them (send its conversation_id){expiry}. No conversation was deleted.")
+            f"Continue one of them (send its conversation_id), delete one you no longer need "
+            f"(DELETE /conversations/{{conversation_id}}){expiry}. No conversation was deleted.")
 
 
 class ThreadOwnershipError(PermissionError):

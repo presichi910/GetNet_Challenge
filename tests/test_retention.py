@@ -105,7 +105,7 @@ def test_the_limit_blocks_a_new_thread_but_never_deletes_or_blocks_existing_ones
         with pytest.raises(ThreadLimitExceeded) as exc:
             mem.begin_turn(A, f"{A}:c4")
         assert "3 conversations" in str(exc.value) and "No conversation was deleted" in str(exc.value)
-        assert "30 days" in str(exc.value)
+        assert "30 days" in str(exc.value) and "DELETE /conversations/{conversation_id}" in str(exc.value)
 
         assert mem.thread_count(A) == 3  # nothing was deleted to make room
         for conv in ("c1", "c2", "c3"):
