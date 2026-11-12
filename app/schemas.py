@@ -165,6 +165,7 @@ class HandoffSummary(BaseModel):
     status: HandoffStatusName
     claimed_by: str | None = None
     claimed_at: str | None = None
+    lease_expires_at: str | None = None  # a claim only holds until then; claim again to renew
     resolution: Literal["approve", "reject"] | None = None
     resolved_at: str | None = None
     created_at: str

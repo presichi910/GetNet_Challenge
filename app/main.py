@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
                              max_threads_per_user=s.max_threads_per_user)
         # the human queue: its own SQLite file. The JSONL stays as an audit copy, and what an older
         # version left in it is imported (once: running it again adds nothing)
-        handoffs = HandoffStore(s.handoffs_db_path)
+        handoffs = HandoffStore(s.handoffs_db_path, lease_seconds=s.handoff_lease_minutes * 60)
         try:
             handoffs.import_jsonl(s.handoffs_file)
         except Exception:  # noqa: BLE001 - an import problem must not stop the API
@@ -189,7 +189,8 @@ def _handoff_not_found() -> HTTPException:
 def _summary_fields(row: dict) -> dict:
     return {**{k: row[k] for k in ("id", "conversation_id", "merchant_id", "reason", "priority", "summary",
                                    "status", "claimed_by", "resolution")},
-            "claimed_at": iso(row["claimed_at"]), "resolved_at": iso(row["resolved_at"]),
+            "claimed_at": iso(row["claimed_at"]), "lease_expires_at": iso(row["lease_expires_at"]),
+            "resolved_at": iso(row["resolved_at"]),
             "created_at": iso(row["created_at"])}
 
 

@@ -1,8 +1,9 @@
 """The handoff queue: SQLite, with the state machine the operators work through.
 
     pending --claim(operator A)--> claimed --reply(operator A)--> resolved
-                                     |  ^ claim again by A: same result, nothing changes
-                                     +-- claim/reply by B: 409
+                                     |  ^ claim again by A: same result, the lease is renewed
+                                     |  +-- claim/reply by B: 409
+                                     +-- lease runs out: back to pending (nobody has to do anything)
 
 Every transition is ONE statement, `UPDATE ... WHERE status = <expected> [AND claimed_by = <me>]`,
 and the rows it touched are counted: 1 means this caller won, 0 means somebody else got there first
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS handoffs (
     status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'claimed', 'resolved')),
     claimed_by      TEXT,
     claimed_at      REAL,
+    lease_expires_at REAL,
     resolution      TEXT CHECK (resolution IS NULL OR resolution IN ('approve', 'reject')),
     operator_reply  TEXT,
     resolved_at     REAL,
@@ -82,7 +84,7 @@ CREATE INDEX IF NOT EXISTS handoff_events_handoff ON handoff_events(handoff_id);
 """
 
 _LIST_COLUMNS = ("id, conversation_id, merchant_id, reason, priority, summary, status, claimed_by, claimed_at, "
-                 "resolution, resolved_at, created_at")
+                 "lease_expires_at, resolution, resolved_at, created_at")
 
 
 class HandoffNotFound(Exception):
@@ -120,7 +122,13 @@ class HandoffStore:
     """One SQLite connection, serialised with a lock (the sync API handlers run in a threadpool).
     The lock is only there to share the connection safely: correctness comes from the UPDATEs."""
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, lease_seconds: float = 900.0, clock=time.time):
+        """`lease_seconds`: how long a claim holds before the handoff goes back to the queue.
+        `clock`: seconds since the epoch, injectable so tests can move time."""
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
+        self.lease_seconds = lease_seconds
+        self._clock = clock
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path, check_same_thread=False, timeout=10, isolation_level=None)
@@ -133,7 +141,33 @@ class HandoffStore:
         self._lock = threading.Lock()
         with self._lock:
             self.conn.executescript(SCHEMA)
+            if "lease_expires_at" not in {r[1] for r in self.conn.execute("PRAGMA table_info(handoffs)")}:
+                self.conn.execute("ALTER TABLE handoffs ADD COLUMN lease_expires_at REAL")  # file from before leases
         self._closed = False
+
+    def _now(self, now: float | None) -> float:
+        return self._clock() if now is None else now
+
+    def _expire(self, conn, now: float) -> None:
+        """Inside a transaction: every claim whose lease ran out goes back to pending, one UPDATE each
+        (guarded, so it can not undo a claim renewed a moment ago), and is recorded."""
+        due = conn.execute("SELECT id, claimed_by FROM handoffs WHERE status = 'claimed' "
+                           "AND COALESCE(lease_expires_at, 0) <= ?", (now,)).fetchall()
+        for row in due:
+            cur = conn.execute("UPDATE handoffs SET status = 'pending', claimed_by = NULL, claimed_at = NULL, "
+                               "lease_expires_at = NULL WHERE id = ? AND status = 'claimed' "
+                               "AND COALESCE(lease_expires_at, 0) <= ?", (row["id"], now))
+            if cur.rowcount == 1:
+                self._event(conn, row["id"], "system", "lease_expired", row["claimed_by"], now)
+                log.info("handoff lease expired id=%s was_claimed_by=%s", row["id"], row["claimed_by"])
+
+    def _sweep(self, now: float | None = None) -> None:
+        """Before a read: expire what is due. Costs one SELECT when nothing is."""
+        now = self._now(now)
+        if self._read("SELECT 1 FROM handoffs WHERE status = 'claimed' AND COALESCE(lease_expires_at, 0) <= ? "
+                      "LIMIT 1", (now,)):
+            with self._tx() as c:
+                self._expire(c, now)
 
     @contextmanager
     def _tx(self):
@@ -215,6 +249,7 @@ class HandoffStore:
         return d
 
     def get(self, handoff_id: str) -> dict | None:
+        self._sweep()
         rows = self._read("SELECT * FROM handoffs WHERE id = ?", (handoff_id,))
         return self._full(rows[0]) if rows else None
 
@@ -222,26 +257,33 @@ class HandoffStore:
         """Oldest first: the one that has waited longest is first."""
         if status is not None and status not in STATUSES:
             raise ValueError(f"status must be one of {STATUSES}")
+        self._sweep()
         where, args = ("WHERE status = ?", (status,)) if status else ("", ())
         rows = self._read(f"SELECT {_LIST_COLUMNS} FROM handoffs {where} ORDER BY created_at ASC, rowid ASC LIMIT ?",
                           (*args, limit))
         return [dict(r) for r in rows]
 
     def claim(self, handoff_id: str, operator: str, now: float | None = None) -> dict:
-        """pending -> claimed by `operator`. Claiming what you already hold is a no-op that returns the
-        same handoff. Raises HandoffNotFound (404) or HandoffConflict (409: held by someone else, or resolved)."""
-        now = time.time() if now is None else now
+        """pending -> claimed by `operator`, for `lease_seconds`. A claim whose lease ran out counts as
+        pending again, so anybody may take it. Claiming what you already hold returns the same handoff
+        (claimed_at stays) and renews the lease: that is how an operator on a long case keeps it.
+        Raises HandoffNotFound (404) or HandoffConflict (409: held by someone else, or resolved)."""
+        now = self._now(now)
+        lease = now + self.lease_seconds
         with self._tx() as c:
-            cur = c.execute("UPDATE handoffs SET status = 'claimed', claimed_by = ?, claimed_at = ? "
-                            "WHERE id = ? AND status = 'pending'", (operator, now, handoff_id))
+            self._expire(c, now)
+            cur = c.execute("UPDATE handoffs SET status = 'claimed', claimed_by = ?, claimed_at = ?, "
+                            "lease_expires_at = ? WHERE id = ? AND status = 'pending'", (operator, now, lease, handoff_id))
             if cur.rowcount == 1:  # we won
                 self._event(c, handoff_id, operator, "claim", None, now)
                 log.info("handoff claimed id=%s operator=%s", handoff_id, operator)
             else:
-                row = c.execute("SELECT status, claimed_by FROM handoffs WHERE id = ?", (handoff_id,)).fetchone()
-                if row is None:
-                    raise HandoffNotFound(handoff_id)
-                if not (row["status"] == "claimed" and row["claimed_by"] == operator):
+                renewed = c.execute("UPDATE handoffs SET lease_expires_at = ? WHERE id = ? AND status = 'claimed' "
+                                    "AND claimed_by = ?", (lease, handoff_id, operator)).rowcount == 1
+                if not renewed:
+                    row = c.execute("SELECT status FROM handoffs WHERE id = ?", (handoff_id,)).fetchone()
+                    if row is None:
+                        raise HandoffNotFound(handoff_id)
                     raise HandoffConflict(
                         "Already resolved." if row["status"] == "resolved" else "Already claimed by another operator.")
             return self._full(c.execute("SELECT * FROM handoffs WHERE id = ?", (handoff_id,)).fetchone())
@@ -256,11 +298,12 @@ class HandoffStore:
         on a resolved handoff, a handoff nobody claimed, or one claimed by someone else: HandoffConflict."""
         if decision not in DECISIONS:
             raise ValueError(f"decision must be one of {DECISIONS}")
-        now = time.time() if now is None else now
+        now = self._now(now)
         with self._tx() as c:
+            self._expire(c, now)  # a lease that ran out is not a claim: claim again first
             cur = c.execute(
                 "UPDATE handoffs SET status = 'resolved', resolution = ?, operator_reply = ?, resolved_at = ?, "
-                "idempotency_key = ? WHERE id = ? AND status = 'claimed' AND claimed_by = ?",
+                "lease_expires_at = NULL, idempotency_key = ? WHERE id = ? AND status = 'claimed' AND claimed_by = ?",
                 (decision, message, now, idempotency_key, handoff_id, operator))
             row = c.execute("SELECT * FROM handoffs WHERE id = ?", (handoff_id,)).fetchone()
             if cur.rowcount == 1:  # we won
@@ -279,7 +322,7 @@ class HandoffStore:
             if row["status"] == "resolved":
                 raise HandoffConflict("Already resolved.")
             if row["status"] == "pending":
-                raise HandoffConflict("Claim the handoff before replying.")
+                raise HandoffConflict("Claim the handoff before replying (it may have been released when your claim expired).")
             raise HandoffConflict("Claimed by another operator.")
 
     def events(self, handoff_id: str) -> list[dict]:
@@ -292,11 +335,13 @@ class HandoffStore:
 
     def status_for(self, merchant_id: str, handoff_id: str) -> str | None:
         """Status of the handoff if it is this merchant's, else None (same answer for 'not yours')."""
+        self._sweep()
         rows = self._read("SELECT status FROM handoffs WHERE id = ? AND merchant_id = ?", (handoff_id, merchant_id))
         return rows[0]["status"] if rows else None
 
     def open_for_conversation(self, merchant_id: str, conversation_id: str, limit: int = 10) -> list[dict]:
         """Handoffs of this conversation still waiting for a person: [{id, status}], oldest first."""
+        self._sweep()
         rows = self._read("SELECT id, status FROM handoffs WHERE merchant_id = ? AND conversation_id = ? "
                           "AND status != 'resolved' ORDER BY created_at ASC, rowid ASC LIMIT ?",
                           (merchant_id, conversation_id, limit))

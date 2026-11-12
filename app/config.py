@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # the handoff queue the operators work through (claim / reply). Its own file: it does not depend on the
     # conversation checkpointer, and the conversation retention purge never touches it
     handoffs_db_path: str = "./data/handoffs.sqlite"
+    # how long an operator's claim holds. After that the handoff is pending again, so one who claimed
+    # and went away does not keep a customer waiting. Claiming again (same operator) renews it
+    handoff_lease_minutes: float = 15.0
 
     # conversation memory: LangGraph checkpoints in one SQLite file (inside the data volume in Docker)
     checkpoint_db_path: str = "./data/checkpoints.sqlite"
