@@ -184,6 +184,19 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
   ```
 
   Or skip the copy and rebuild the knowledge base: `docker compose run --rm ingest` (uses Voyage and Tavily). If a volume ever has the wrong owner, repeat only the `chown` with `-u root --entrypoint chown api -R 10001:10001 /app/data`.
+- **Warning: `docker compose down -v` deletes the `data` volume**: the Chroma index, `tickets.jsonl`, `handoffs.jsonl` and the crawl cache, with no confirmation and no undo. The same goes for `docker volume rm` and `docker volume prune` / `docker system prune --volumes`. Plain `docker compose down` and `up --build` keep it. Rebuilding the index costs Voyage and Tavily calls, and tickets and handoffs cannot be rebuilt. **Back it up before you migrate, recreate or `down -v`:**
+
+  ```bash
+  # Git Bash on Windows: prefix with MSYS_NO_PATHCONV=1 and use $(pwd -W) instead of $PWD
+  docker compose run --rm --no-deps -u root -v "$PWD:/backup" --entrypoint tar api \
+    czf /backup/getnet-data-$(date +%F).tgz -C /app/data .
+
+  # restore into an empty or recreated volume
+  docker compose run --rm --no-deps -u root -v "$PWD:/backup:ro" --entrypoint sh api \
+    -c 'tar xzf /backup/getnet-data-YYYY-MM-DD.tgz -C /app/data && chown -R 10001:10001 /app/data'
+  ```
+
+  Stop the API first (`docker compose stop api`) so Chroma is not copied while it writes. The backup is a file in your project folder: keep it out of git (it is not in `.gitignore` yet, so do not `git add .`) and out of OneDrive if it holds real customer data.
 - **Read the handoff queue and tickets from the volume:** `docker compose exec api cat /app/data/handoffs.jsonl`, or `docker compose cp api:/app/data/handoffs.jsonl .`. Running outside Docker still uses `./data`.
 - **CI** (`.github/workflows/ci.yml`, on push and pull request to `main`): `pytest` on Python 3.12 with a pip cache, no `.env` and no API keys (only a fake `JWT_SECRET` in the job), plus a `docker build` (no push) that fails if the container's uid is not 10001.
 
