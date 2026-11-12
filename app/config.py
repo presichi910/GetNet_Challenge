@@ -22,8 +22,11 @@ class Settings(BaseSettings):
 
     # models
     llm_model: str = "openai/gpt-oss-120b"
-    # smaller model for router, support and synthesizer (Groq limits are per model)
+    # smaller model for router and synthesizer (Groq limits are per model)
     light_model: str = "openai/gpt-oss-20b"
+    # support agent. Empty = the same model as LIGHT_MODEL. A bigger model follows the "always call
+    # get_recent_transactions on a decline" rule much better (q08), at the cost of its quota.
+    support_model: str = ""
     judge_model: str = "qwen/qwen3.8-27b"
     reasoning_effort: str = "low"  # gpt-oss only, keeps it fast
     embedding_model: str = "voyage-3.5"
@@ -46,6 +49,11 @@ class Settings(BaseSettings):
     history_window: int = 6
 
     log_level: str = "INFO"
+
+
+    @property
+    def effective_support_model(self) -> str:
+        return self.support_model or self.light_model
 
 
 @lru_cache

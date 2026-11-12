@@ -5,8 +5,8 @@
     python -m eval.run_eval --no-judge      # skip the LLM judge
     python -m eval.run_eval --retries 3     # wait out per-minute rate limits (default 2)
 
-Models per role come from LLM_MODEL (knowledge), LIGHT_MODEL (router, support, synthesizer) and
-JUDGE_MODEL, and the report says which ones ran. A partial run (--only) never overwrites latest.md.
+Models per role come from LLM_MODEL (knowledge), LIGHT_MODEL (router, synthesizer), SUPPORT_MODEL (support,
+default LIGHT_MODEL) and JUDGE_MODEL, and the report says which ones ran. A partial run (--only) never overwrites latest.md.
 
 Per case: routing check, tool check, handoff check, and the LLM judge (relevance,
 groundedness, completeness, tone, 1-5). Also latency p50/p95 and degraded rate.
@@ -217,7 +217,8 @@ def current_models() -> dict:
     from app.config import get_settings
 
     s = get_settings()
-    return {"knowledge": s.llm_model, "router / support / synthesizer": s.light_model, "judge": s.judge_model}
+    return {"knowledge": s.llm_model, "router / synthesizer": s.light_model, "support": s.effective_support_model,
+            "judge": s.judge_model}
 
 
 def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | None = None) -> str:

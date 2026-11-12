@@ -22,7 +22,7 @@ def make_support_node(llm=None, repo: CustomerRepository | None = None):
                                        prior_context=format_prior_context(outputs))
         tools = [*make_support_tools(user_id, repository), escalate_to_human]  # only for this user
         history = recent_dialogue(state["messages"], get_settings().history_window)
-        result = run_tool_agent("support", llm or get_llm(model=get_settings().light_model), tools, prompt, history)
+        result = run_tool_agent("support", llm or get_llm(model=get_settings().effective_support_model), tools, prompt, history)
         return {"agent_outputs": {**outputs, "support": result}, "step": state.get("step", 0) + 1}
 
     return support_node

@@ -2,7 +2,8 @@
 # Override for a single run: LIGHT_MODEL=openai/gpt-oss-120b docker compose run --rm eval
 x-models: &models
   LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-120b}      # knowledge agent
-  LIGHT_MODEL: ${LIGHT_MODEL:-openai/gpt-oss-20b}   # router, support, synthesizer
+  LIGHT_MODEL: ${LIGHT_MODEL:-openai/gpt-oss-20b}   # router, synthesizer (and support if SUPPORT_MODEL is empty)
+  SUPPORT_MODEL: ${SUPPORT_MODEL:-}                 # support agent, empty = same as LIGHT_MODEL
   JUDGE_MODEL: ${JUDGE_MODEL:-qwen/qwen3.8-27b}     # eval judge (different family than the agents)
   REASONING_EFFORT: ${REASONING_EFFORT:-low}
 
