@@ -310,3 +310,44 @@ def test_rows_keep_the_exact_tool_calls_with_their_arguments():
         {"agent": "knowledge", "name": "search_getnet_kb", "args": {"query": "decline error"}},
     ]
     assert row["tools_called"] == ["get_terminal_status", "get_recent_transactions", "search_getnet_kb"]  # unchanged
+
+
+# ---------------- multi-turn cases ----------------
+
+def multi_turn_cases():
+    return [c for c in load_cases(None) if c.get("history")]
+
+
+def test_multi_turn_cases_are_well_formed():
+    cases = multi_turn_cases()
+    assert 3 <= len(cases) <= 5
+    for c in cases:
+        roles = [t["role"] for t in c["history"]]
+        assert roles == ["user", "assistant"] * (len(roles) // 2) and roles, c["id"]  # alternate, start with the customer, end with the assistant
+        assert all(t["content"].strip() for t in c["history"]), c["id"]
+
+
+def test_the_history_is_given_to_the_graph_as_context_and_single_turn_cases_are_called_as_before():
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from eval.run_eval import evaluate, history_messages, judge_question
+
+    case = {**CASE, "history": [{"role": "user", "content": "I like green"}, {"role": "assistant", "content": "Noted"}]}
+    assert [type(m) for m in history_messages(case)] == [HumanMessage, AIMessage]
+
+    seen = {}
+
+    class Recording(FakeService):
+        def run_raw(self, message, user_id, thread_id=None, **kw):
+            seen["kw"] = kw
+            return super().run_raw(message, user_id, thread_id)
+
+    rows = evaluate([case], Recording(good_state()), None, pause=0)
+    assert [m.content for m in seen["kw"]["context"]] == ["I like green", "Noted"]
+    assert rows[0]["history"] == case["history"]
+
+    # a case without history never passes `context` (so a service with the old signature still works)
+    evaluate([CASE], FakeService(good_state()), None, pause=0)
+    assert judge_question(CASE) == "hi"
+    q = judge_question(case)
+    assert "Customer: I like green" in q and "Assistant: Noted" in q and q.endswith("hi")

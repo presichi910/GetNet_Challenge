@@ -103,6 +103,23 @@ def retry_wait(text: str, floor: float = 5.0, cap: float = 70.0) -> float:
     return min(cap, max(floor, hinted + 2))
 
 
+def history_messages(case: dict) -> list:
+    """Earlier turns of a multi-turn case, as the messages the graph would hold after them. They are
+    given to the graph as context, so setting the case up costs no model calls and every run of the
+    case starts from exactly the same conversation. Only the LAST message of the case is evaluated."""
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    return [(HumanMessage if t["role"] == "user" else AIMessage)(content=t["content"]) for t in case.get("history", [])]
+
+
+def judge_question(case: dict) -> str:
+    """What the judge reads as the user's question: the earlier turns (it cannot see the graph's memory) and the message."""
+    if not case.get("history"):
+        return case["message"]
+    past = "\n".join(f"{'Customer' if t['role'] == 'user' else 'Assistant'}: {t['content']}" for t in case["history"])
+    return f"(Earlier in the same conversation)\n{past}\n\n(Latest customer message)\n{case['message']}"
+
+
 def error_row(case: dict, reason: str, latency_ms: int = 0) -> dict:
     return {"id": case["id"], "message": case["message"], "provider_error": reason, "latency_ms": latency_ms}
 
@@ -120,7 +137,8 @@ def run_case(service, case: dict, thread_base: str, retries: int, sleep) -> tupl
     for attempt in range(retries + 1):
         state, latency, exc = None, 0, None
         try:
-            state, latency = service.run_raw(case["message"], case["user_id"], thread_id=f"{thread_base}-{attempt}")
+            extra = {"context": history_messages(case)} if case.get("history") else {}  # single-turn cases call it as before
+            state, latency = service.run_raw(case["message"], case["user_id"], thread_id=f"{thread_base}-{attempt}", **extra)
         except Exception as e:  # noqa: BLE001
             exc = f"{type(e).__name__}: {e}"
         # classify with the FULL text: a daily quota must not be mistaken for a per-minute limit
@@ -170,8 +188,10 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float,
         reason = (state.get("handoff") or {}).get("reason")
         row["handoff"] = reason
         row["handoff_ok"] = handoff_ok(c, reason)
+        if c.get("history"):
+            row["history"] = c["history"]  # which conversation the message was answered in
         if judge:
-            row["judge"] = judge.score(c["message"], row["answer"], evidence, c.get("criteria", ""))
+            row["judge"] = judge.score(judge_question(c), row["answer"], evidence, c.get("criteria", ""))
         rows.append(row)
         if pause:
             time.sleep(pause)  # avoid rate limits
