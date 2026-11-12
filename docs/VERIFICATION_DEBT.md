@@ -161,7 +161,28 @@ docker compose run --rm --service-ports -e SUMMARY_THRESHOLD=4 -e HISTORY_WINDOW
 ### 9. Retention (optional, no tokens)
 `THREAD_TTL_DAYS` and `MAX_THREADS_PER_USER` are covered by tests with injected clocks. One look at the real thing: `docker compose run --rm --service-ports -e MAX_THREADS_PER_USER=2 api`, then three different `conversation_id`s as the same customer.
 
-- [ ] The third gets `429` and the message "You already have 2 conversations... No conversation was deleted.", and the first two still answer.
+- [ ] The third gets `429` and the message "You already have 2 conversations... delete one you no longer need (DELETE /conversations/{conversation_id}) ... No conversation was deleted.", and the first two still answer.
+- [ ] `DELETE /conversations/<one of them>` answers `204`, and the third conversation now goes through.
+
+### 10. Conversation endpoints with a real chat (step 3b)
+The endpoints were checked in the container (2026-11-12) with threads seeded by stub agents: real JWTs from `scripts.issue_token`, the real volume, `204` and a `404` for another customer's id, and the token of a deleted message gone from `checkpoints.sqlite` and its `-wal`. What needs a real agent turn is the content. About 10K tokens.
+
+```bash
+T1=$(python -m scripts.issue_token --user cliente1988 | head -1)
+T2=$(python -m scripts.issue_token --user cliente2024 | head -1)
+chat() { curl -s -X POST localhost:8000/chat -H "Authorization: Bearer $1" -H "Content-Type: application/json" -d "$2"; echo; }
+chat $T1 '{"message":"My name for this chat is Rafa. When will I receive my payout?","conversation_id":"del-1"}'
+curl -s localhost:8000/conversations/del-1 -H "Authorization: Bearer $T1"        # real history and turns
+curl -s -o /dev/null -w '%{http_code}
+' localhost:8000/conversations/del-1 -H "Authorization: Bearer $T2"   # 404, no tokens
+curl -s -o /dev/null -w '%{http_code}
+' -X DELETE localhost:8000/conversations/del-1 -H "Authorization: Bearer $T1"   # 204
+chat $T1 '{"message":"What name did I give you?","conversation_id":"del-1"}'
+```
+
+- [ ] `GET` shows the real question and the real answer (the same text `/chat` returned) and `turns` is 1. The `404` for the other customer needs no quota.
+- [ ] After the `DELETE`, the same `conversation_id` starts empty: the agent does **not** answer "Rafa".
+- [ ] Optional: ask for a human in that conversation (`I want to talk to a person`), then `DELETE` it. The conversation is gone, but the handoff record in `docker compose exec api tail -n 1 /app/data/handoffs.jsonl` still has its excerpt. That is documented, not a bug; decide whether the retention of `handoffs.jsonl` and `tickets.jsonl` is the next step.
 
 ## Done when
 
