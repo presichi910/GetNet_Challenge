@@ -50,6 +50,14 @@ HTTP service that answers Getnet customer messages by orchestrating specialised 
 | F39 | The operator reply enters the agents' context as an assistant-side `[Operador humano] (decision) text` message, once, through `recent_dialogue`; with no reply the agents' input is identical to before; a customer typing the label gets it turned into a quote | `tests/test_handoff_resume.py` |
 | F40 | `GET /conversations/{id}` reports `pending_human` (a handoff of the conversation is pending or claimed) | `test_pending_human_...` in `tests/test_operator_api.py` |
 | F41 | The old JSONL queue is imported at startup only with `HANDOFF_IMPORT_JSONL=true` (default false); when off and the file has unimported records, the log says how many | `test_the_old_file_is_not_imported_by_default_...`, `test_with_the_flag_on_...` |
+| F42 | The agents' provider is chosen by `AGENT_PROVIDER` (`groq` default, `fireworks`); the eval judge is always Groq | `tests/test_llm_provider.py` |
+| F43 | Every turn records, per LLM call, node, model, input/output tokens, latency and error type, and per tool call its name, latency and ok/error, through a callback attached to `graph.invoke` (no prompt or node change) | `test_tokens_and_cost_are_summed_per_node_and_model_through_the_real_graph`, `test_every_prompt_is_byte_for_byte_what_it_was_before_observability` |
+| F44 | Cost uses a price table (USD per 1M input/output) with an env override; a model without a price costs null, never 0 | `test_cost_uses_the_input_price_...`, `test_a_model_without_a_price_costs_null_not_zero`, `test_one_unpriced_model_makes_the_turn_cost_null_...` |
+| F45 | `/chat` returns `usage` {input/output/total tokens, cost_usd, by_node}; no other field changes | `test_chat_through_the_api_carries_usage` |
+| F46 | Traces and spans are stored in `TRACES_DB_PATH` without any message, answer or tool result; erased by `DELETE /conversations/{id}` and by the TTL purge; a store failure never fails the turn | `test_handle_returns_usage_and_stores_a_trace_without_any_text`, `test_delete_conversation_erases_its_traces_...`, `test_the_ttl_purge_erases_old_traces_...`, `test_a_broken_trace_store_never_fails_the_turn` |
+| F47 | `GET /operator/metrics?since=&until=` (operator only): requests, latency p50/p95, degraded and handoff rates, provider errors, tokens and cost per node and model | `test_metrics_aggregates_for_an_operator`, `test_metrics_is_403_for_a_merchant_...` |
+| F48 | A turn above `MAX_TURN_TOKENS` / `MAX_TURN_COST_USD`, or with a provider 429, logs a WARNING `ALERT` line; the request log line gains `tokens=` and `cost_usd=` | `test_a_turn_above_the_token_or_cost_limit_logs_an_alert`, `test_no_alert_under_the_limits_and_a_429_is_an_alert`, `test_the_existing_log_line_keeps_its_fields_...` |
+| F49 | The eval report shows tokens and cost per case and per model (agents and judge) | `tests/test_eval_usage.py` |
 
 ## 3. Non-functional requirements
 
@@ -85,7 +93,7 @@ Routing rules:
 Synthesizer: 0 outputs -> direct reply; 1 -> passthrough; 2+ -> merge; all failed -> static fallback.
 
 ## 5. Out of scope (for now)
-Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider (RS256/JWKS, refresh, revocation), rate limiting, real customer backend, an operator UI, a real notifier (Slack/Teams/helpdesk) for the handoff queue, reassigning a claimed case to a named operator, and encryption of `handoffs.sqlite`.
+Guardrail classifiers, an OpenTelemetry/Langfuse export, visual dashboards, alert delivery, an identity provider (RS256/JWKS, refresh, revocation), rate limiting, real customer backend, an operator UI, a real notifier (Slack/Teams/helpdesk) for the handoff queue, reassigning a claimed case to a named operator, and encryption of `handoffs.sqlite`.
 
 ## 6. Open decisions (resolved with the product owner)
 - Routing style: multi-step plan (chosen) vs single-agent vs supervisor loop.

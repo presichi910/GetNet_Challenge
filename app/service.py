@@ -10,8 +10,9 @@ from datetime import datetime, timezone
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.handoff import defuse_label, operator_context_message
+from app.observability import TurnCollector, price_table, turn_alerts
 from app.schemas import (DEFAULT_CONVERSATION, ChatResponse, HandoffInfo, OpenHandoff, OperatorMessage, Routing,
-                         Source, ToolCall)
+                         Source, ToolCall, Usage)
 
 log = logging.getLogger("chat")
 
@@ -23,23 +24,31 @@ def thread_id_for(user_id: str, conversation_id: str | None = None) -> str:
 
 
 class ChatService:
-    def __init__(self, graph, memory=None, handoffs=None):
+    def __init__(self, graph, memory=None, handoffs=None, traces=None):
         self.graph = graph
+        # app.observability.TraceStore: per-turn traces and spans (no text). None = not stored, the
+        # response still carries `usage`
+        self.traces = traces
         self.memory = memory  # app.memory.Memory: thread registry (limit, owner, last activity)
         # app.handoff_store.HandoffStore: the human queue. It is NOT part of the graph state or the
         # checkpointer, so conversations can change storage without touching human oversight.
         self.handoffs = handoffs
 
     def run_raw(self, message: str, user_id: str, thread_id: str | None = None,
-                conversation_id: str | None = None, context: list | None = None) -> tuple[dict, int]:
+                conversation_id: str | None = None, context: list | None = None,
+                callbacks: list | None = None) -> tuple[dict, int]:
         """Run the graph. Returns (state, latency_ms). `context`: messages that go into the conversation
         just before the customer's (an operator's reply). None or empty: the input is exactly what it
-        always was."""
+        always was. `callbacks`: LangChain callback handlers for this run only (observability); they see
+        every LLM and tool call of every node without any node knowing about them."""
+        config = {"configurable": {"thread_id": thread_id or thread_id_for(user_id)}, "recursion_limit": 25}
+        if callbacks:
+            config["callbacks"] = callbacks
         t0 = time.perf_counter()
         state = self.graph.invoke(
             {"messages": [*(context or []), HumanMessage(content=message)], "user_id": user_id,
              "conversation_id": conversation_id or DEFAULT_CONVERSATION},
-            config={"configurable": {"thread_id": thread_id or thread_id_for(user_id)}, "recursion_limit": 25},
+            config=config,
         )
         return state, int((time.perf_counter() - t0) * 1000)
 
@@ -83,7 +92,13 @@ class ChatService:
         # not caught: if the erase fails the client gets a 500 and retries, and the retry finds the
         # leftover handoffs (the conversation itself is already gone) and finishes the job
         erased = self.handoffs.delete_conversation(user_id, conversation_id) if self.handoffs else 0
-        return deleted or erased > 0
+        # the traces hold no text, but they are still this conversation's records: they go with it
+        traced = self.traces.delete_conversation(user_id, conversation_id) if self.traces else 0
+        return deleted or erased > 0 or traced > 0
+
+    def metrics(self, since: float | None = None, until: float | None = None) -> dict | None:
+        """Aggregates for operators (GET /operator/metrics). None if no trace store is configured."""
+        return self.traces.metrics(since, until) if self.traces else None
 
     def operator_messages(self, user_id: str, conversation_id: str) -> list[dict] | None:
         """Every operator message of the caller's own conversation, or None if the conversation is not
@@ -143,9 +158,11 @@ class ChatService:
         # raises ThreadLimitExceeded for a new thread above the per-user limit, before anything runs
         created = self.memory.begin_turn(user_id, thread_id) if self.memory else False
         taken = self._take_operator_messages(user_id, conversation_id)
+        collector = self._collector()
         try:
             state, latency_ms = self.run_raw(defuse_label(message), user_id, thread_id, conversation_id,
-                                             context=[operator_context_message(m) for m in taken])
+                                             context=[operator_context_message(m) for m in taken],
+                                             callbacks=[collector] if collector else None)
         except Exception:
             if taken:
                 self._give_back(user_id, conversation_id, taken)
@@ -189,8 +206,51 @@ class ChatService:
             latency_ms=latency_ms,
             trace_id=trace_id,
         )
-        # one log line per request
-        log.info("trace=%s user=%s conv=%s plan=%s used=%s tools=%s degraded=%s handoff=%s latency_ms=%d",
+        usage = self._observe(resp, collector)
+        # one log line per request (tokens and cost are appended; the fields before them are unchanged)
+        log.info("trace=%s user=%s conv=%s plan=%s used=%s tools=%s degraded=%s handoff=%s latency_ms=%d tokens=%s cost_usd=%s",
                  trace_id, user_id, conversation_id, resp.routing.plan, resp.agents_used,
-                 [t.name for t in tool_calls], resp.degraded, resp.handoff.reason if resp.handoff else None, latency_ms)
+                 [t.name for t in tool_calls], resp.degraded, resp.handoff.reason if resp.handoff else None, latency_ms,
+                 usage["total_tokens"] if usage else None,
+                 None if not usage or usage["cost_usd"] is None else f"{usage['cost_usd']:.6f}")
         return resp
+
+    # ---- observability. Nothing here may fail a turn: any problem is logged and the reply goes out ----
+
+    @staticmethod
+    def _collector() -> TurnCollector | None:
+        try:
+            from app.config import get_settings
+
+            return TurnCollector(price_table(get_settings().model_prices_json))
+        except Exception:  # noqa: BLE001
+            log.warning("observability disabled for this turn", exc_info=True)
+            return None
+
+    def _observe(self, resp: ChatResponse, collector: TurnCollector | None) -> dict | None:
+        """Fill `resp.usage`, log the alerts and store the trace. Returns the usage dict."""
+        if collector is None:
+            return None
+        try:
+            from app.config import get_settings
+
+            usage = collector.usage()
+            resp.usage = Usage(**usage)
+            s = get_settings()
+            for alert in turn_alerts(usage, collector, s.max_turn_tokens, s.max_turn_cost_usd):
+                log.warning("ALERT %s trace=%s user=%s conv=%s", alert, resp.trace_id, resp.user_id, resp.conversation_id)
+        except Exception:  # noqa: BLE001
+            log.warning("could not compute the usage of trace=%s", resp.trace_id, exc_info=True)
+            return None
+        if self.traces is not None:
+            try:
+                self.traces.record({"trace_id": resp.trace_id, "user_id": resp.user_id,
+                                    "conversation_id": resp.conversation_id, "latency_ms": resp.latency_ms,
+                                    "plan": resp.routing.plan, "degraded": resp.degraded,
+                                    "handoff_reason": resp.handoff.reason if resp.handoff else None,
+                                    "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"],
+                                    "cost_usd": usage["cost_usd"], "provider_errors": len(collector.provider_errors())},
+                                   collector.spans)
+            except Exception:  # noqa: BLE001 - a trace store problem never fails the turn
+                log.warning("could not store trace=%s", resp.trace_id, exc_info=True)
+        return usage

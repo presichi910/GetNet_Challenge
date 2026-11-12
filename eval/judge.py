@@ -28,14 +28,15 @@ class Judge:
     def __init__(self, llm=None):
         self.llm = llm or get_judge_llm(temperature=0.0, max_tokens=500)  # always Groq, whatever AGENT_PROVIDER
 
-    def score(self, question: str, answer: str, evidence: list[str], criteria: str = "") -> dict:
+    def score(self, question: str, answer: str, evidence: list[str], criteria: str = "", callbacks=None) -> dict:
         ev = "\n\n".join(evidence) if evidence else "(no evidence: the assistant used no tools)"
         note = f"## Case-specific expected behavior (takes precedence)\n{criteria}\n\n" if criteria else ""
         user = f"{note}## User question\n{question}\n\n## Assistant answer\n{answer}\n\n## Evidence available to the assistant\n{ev}"
         last_err = None
         for _ in range(2):
             try:
-                msg = self.llm.invoke([SystemMessage(content=JUDGE_PROMPT), HumanMessage(content=user)])
+                msg = self.llm.invoke([SystemMessage(content=JUDGE_PROMPT), HumanMessage(content=user)],
+                                      config={"callbacks": callbacks} if callbacks else None)
                 return parse_judgement(str(msg.content))
             except Exception as e:  # noqa: BLE001
                 last_err = e

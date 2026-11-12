@@ -9,7 +9,8 @@ Models per role come from LLM_MODEL (knowledge), LIGHT_MODEL (router, synthesize
 default LIGHT_MODEL) and JUDGE_MODEL, and the report says which ones ran. A partial run (--only) never overwrites latest.md.
 
 Per case: routing check, tool check, handoff check, and the LLM judge (relevance,
-groundedness, completeness, tone, 1-5). Also latency p50/p95 and degraded rate.
+groundedness, completeness, tone, 1-5). Also latency p50/p95, degraded rate, and the tokens and
+estimated cost of every case (agents and judge, per model; app/observability.py prices).
 
 A case that hit a PROVIDER error (rate limit, exhausted quota, connection/5xx) says nothing
 about the system's quality, so it is marked `error` and left out of every metric. A run with
@@ -18,6 +19,7 @@ provider errors does not overwrite eval/reports/latest.md.
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import logging
 import re
@@ -27,6 +29,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from app.observability import PRICES_AS_OF, TurnCollector, price_table, sum_costs
 from eval.judge import SCORE_KEYS, Judge
 
 ROOT = Path(__file__).parent
@@ -131,13 +134,33 @@ def pct(values: list[float], p: float) -> float:
     return s[min(len(s) - 1, int(round(p * (len(s) - 1))))]
 
 
-def run_case(service, case: dict, thread_base: str, retries: int, sleep) -> tuple[dict | None, int, str | None]:
+def _accepts(fn, name: str) -> bool:
+    """True if `fn` takes the keyword `name` (or **kwargs): an older service without it still works."""
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == name or p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
+
+
+def _prices() -> dict:
+    from app.config import get_settings
+
+    return price_table(get_settings().model_prices_json)
+
+
+def run_case(service, case: dict, thread_base: str, retries: int, sleep,
+             collector_out: list | None = None) -> tuple[dict | None, int, str | None]:
     """Run one case. A per-minute rate limit is waited out and retried (new thread each time);
-    anything else, including a daily quota, is returned as it is. -> (state, latency_ms, exception)"""
+    anything else, including a daily quota, is returned as it is. -> (state, latency_ms, exception).
+    `collector_out` receives the TurnCollector of the attempt that is returned (tokens and cost)."""
     for attempt in range(retries + 1):
         state, latency, exc = None, 0, None
+        collector = TurnCollector(_prices())
         try:
             extra = {"context": history_messages(case)} if case.get("history") else {}  # single-turn cases call it as before
+            if _accepts(service.run_raw, "callbacks"):
+                extra["callbacks"] = [collector]
             state, latency = service.run_raw(case["message"], case["user_id"], thread_id=f"{thread_base}-{attempt}", **extra)
         except Exception as e:  # noqa: BLE001
             exc = f"{type(e).__name__}: {e}"
@@ -148,6 +171,8 @@ def run_case(service, case: dict, thread_base: str, retries: int, sleep) -> tupl
             print(f"   rate limited, waiting {wait:.0f}s and retrying ({attempt + 1}/{retries})")
             sleep(wait)
             continue
+        if collector_out is not None:
+            collector_out.append(collector)
         return state, latency, exc
     raise AssertionError("unreachable")
 
@@ -159,7 +184,8 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float,
     for c in cases:
         print(f"-> {c['id']}: {c['message']}")
         # new thread per case, no shared memory
-        state, latency, exc = run_case(service, c, f"eval-{run_id}-{c['id']}", retries, sleep)
+        collectors: list[TurnCollector] = []
+        state, latency, exc = run_case(service, c, f"eval-{run_id}-{c['id']}", retries, sleep, collectors)
         if exc is not None:
             if is_provider_error(exc):
                 rows.append(error_row(c, f"run: {' '.join(exc.split())[:200]}"))
@@ -190,8 +216,17 @@ def evaluate(cases: list[dict], service, judge: Judge | None, pause: float,
         row["handoff_ok"] = handoff_ok(c, reason)
         if c.get("history"):
             row["history"] = c["history"]  # which conversation the message was answered in
+        if collectors and collectors[0].spans:
+            row["usage"] = collectors[0].usage()
         if judge:
-            row["judge"] = judge.score(judge_question(c), row["answer"], evidence, c.get("criteria", ""))
+            jc = TurnCollector(_prices())
+            if _accepts(judge.score, "callbacks"):
+                row["judge"] = judge.score(judge_question(c), row["answer"], evidence, c.get("criteria", ""),
+                                           callbacks=[jc])
+                if jc.spans:
+                    row["judge_usage"] = jc.usage()
+            else:
+                row["judge"] = judge.score(judge_question(c), row["answer"], evidence, c.get("criteria", ""))
         rows.append(row)
         if pause:
             time.sleep(pause)  # avoid rate limits
@@ -226,7 +261,41 @@ def summarize(rows: list[dict]) -> dict:
         for k in SCORE_KEYS:
             s[f"avg_{k}"] = round(statistics.mean(j[k] for j in judged), 2)
         s["judge_pass_rate"] = sum(j["verdict"] == "pass" for j in judged) / len(judged)
+    s.update(usage_summary(rows))
     return s
+
+
+def usage_summary(rows: list[dict]) -> dict:
+    """Tokens per model (agents and judge apart) and the estimated cost. A cost is None when a model of
+    that group has no price. Empty when no row recorded usage (e.g. an old report)."""
+    agents = [g for r in rows for g in (r.get("usage") or {}).get("by_node", [])]
+    judges = [g for r in rows for g in (r.get("judge_usage") or {}).get("by_node", [])]
+    if not agents and not judges:
+        return {}
+    by_model: dict[tuple[str, str], dict] = {}
+    for role, groups in (("agents", agents), ("judge", judges)):
+        for g in groups:
+            m = by_model.setdefault((role, g["model"]), {"role": role, "model": g["model"], "calls": 0,
+                                                         "input_tokens": 0, "output_tokens": 0, "costs": []})
+            m["calls"] += g["calls"]
+            m["input_tokens"] += g["input_tokens"]
+            m["output_tokens"] += g["output_tokens"]
+            m["costs"].append(g["cost_usd"])
+    models = []
+    for m in by_model.values():
+        costs = m.pop("costs")
+        models.append({**m, "cost_usd": sum_costs(costs)})
+    agent_cost = sum_costs(m["cost_usd"] for m in models if m["role"] == "agents")
+    judge_cost = sum_costs(m["cost_usd"] for m in models if m["role"] == "judge")
+    case_tokens = [r["usage"]["total_tokens"] for r in rows if r.get("usage")]
+    return {
+        "agent_tokens": sum(m["input_tokens"] + m["output_tokens"] for m in models if m["role"] == "agents"),
+        "judge_tokens": sum(m["input_tokens"] + m["output_tokens"] for m in models if m["role"] == "judge"),
+        "agent_tokens_per_case_mean": round(statistics.mean(case_tokens)) if case_tokens else 0,
+        "agent_cost_usd": agent_cost, "judge_cost_usd": judge_cost,
+        "total_cost_usd": sum_costs([agent_cost, judge_cost]),
+        "tokens_by_model": models,
+    }
 
 
 MAX_SCORE = 5  # judge scale is 1-5; reports show it as a percentage of the maximum
@@ -234,6 +303,10 @@ MAX_SCORE = 5  # judge scale is 1-5; reports show it as a percentage of the maxi
 
 def _score_pct(v) -> str:
     return "-" if v is None else f"{v / MAX_SCORE * 100:.0f}%"
+
+
+def _usd(v) -> str:
+    return "n/a" if v is None else f"${v:.4f}"
 
 
 def current_models() -> dict:
@@ -254,25 +327,39 @@ def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | No
         lines += [f"**{summary['provider_errors']} case(s) hit a provider error (rate limit / quota / outage) "
                   "and are excluded from every metric below.**", ""]
     for k, v in summary.items():
-        if k == "cases":
+        if k in ("cases", "tokens_by_model"):
             continue
-        if k.startswith("avg_"):
+        if k.endswith("_cost_usd"):
+            lines.append(f"- **{k}**: {_usd(v)}")
+        elif k.startswith("avg_"):
             lines.append(f"- **{k}**: {_score_pct(v)}")
         elif k.endswith(("_accuracy", "_rate")):
             lines.append(f"- **{k}**: {v * 100:.0f}%")
         else:
             lines.append(f"- **{k}**: {v}")
-    lines += ["", "## Cases", "", "| id | route | tools | handoff | rel | grounded | compl | tone | verdict | ms |", "|---|---|---|---|---|---|---|---|---|---|"]
+    if summary.get("tokens_by_model"):
+        lines += ["", "## Tokens and estimated cost per model", "",
+                  f"_Prices: app/observability.py (USD per 1M tokens, list prices of {PRICES_AS_OF}); "
+                  "a model without a price shows `n/a`, not 0._", "",
+                  "| role | model | calls | input | output | cost USD |", "|---|---|---|---|---|---|"]
+        for m in summary["tokens_by_model"]:
+            lines.append(f"| {m['role']} | `{m['model']}` | {m['calls']} | {m['input_tokens']} | {m['output_tokens']} "
+                         f"| {_usd(m['cost_usd'])} |")
+    lines += ["", "## Cases", "", "_tokens / cost: the agents of the case (the judge is apart, above)._", "",
+              "| id | route | tools | handoff | rel | grounded | compl | tone | verdict | ms | tokens | cost USD |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         if r.get("provider_error"):
-            lines.append(f"| {r['id']} | - | - | - | - | - | - | - | error | {r['latency_ms']} |")
+            lines.append(f"| {r['id']} | - | - | - | - | - | - | - | error | {r['latency_ms']} | - | - |")
             continue
         j = r.get("judge", {})
+        u = r.get("usage") or {}
         h_ok = {True: "OK", False: "FAIL", None: "-"}[r.get("handoff_ok")]
         lines.append(f"| {r['id']} | {'OK' if r['routing_ok'] else 'FAIL'} {r.get('plan', '')} | {'OK' if r['tools_ok'] else 'FAIL'} "
                      f"| {h_ok} {r.get('handoff') or ''} | {_score_pct(j.get('relevance'))} | {_score_pct(j.get('groundedness'))} "
                      f"| {_score_pct(j.get('completeness'))} | {_score_pct(j.get('tone'))} "
-                     f"| {j.get('verdict', '-')} | {r['latency_ms']} |")
+                     f"| {j.get('verdict', '-')} | {r['latency_ms']} | {u.get('total_tokens', '-')} "
+                     f"| {_usd(u['cost_usd']) if u else '-'} |")
     errored = [r for r in rows if r.get("provider_error")]
     if errored:
         lines += ["", "## Provider errors (excluded from the metrics, re-run these cases)", ""]

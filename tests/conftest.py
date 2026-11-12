@@ -66,3 +66,14 @@ def bearer(token: str) -> dict:
 def operator_jwt(operator: str = "ops1", scope: str | None = "operator", **kw) -> str:
     """A token for support staff: role operator, scope operator."""
     return make_jwt(operator, scope, role="operator", **kw)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_traces(tmp_path, monkeypatch):
+    """No test ever writes the real ./data/traces.sqlite (the API lifespan opens TRACES_DB_PATH)."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("TRACES_DB_PATH", str(tmp_path / "traces.sqlite"))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()

@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
 
@@ -16,8 +17,8 @@ from app.config import get_settings
 from app.handoff_store import HandoffConflict, HandoffNotFound, HandoffStore, iso
 from app.memory import Memory, ThreadLimitExceeded
 from app.schemas import (ChatRequest, ChatResponse, ConversationDetail, ConversationList, HandoffDetail,
-                         HandoffList, HandoffStatusName, HandoffSummary, OperatorMessageList, RejectRequest, ReplyRequest,
-                         ReplyResult, is_valid_conversation_id, is_valid_handoff_id)
+                         HandoffList, HandoffStatusName, HandoffSummary, MetricsResponse, OperatorMessageList,
+                         RejectRequest, ReplyRequest, ReplyResult, is_valid_conversation_id, is_valid_handoff_id)
 from app.service import ChatService
 
 log = logging.getLogger("api")
@@ -35,22 +36,27 @@ def _warn_if_unimported(path: str) -> None:
                     "Back it up and clean it, then set HANDOFF_IMPORT_JSONL=true to import it once.", path, n)
 
 
-def _purge_once(memory: Memory, handoffs: HandoffStore | None) -> None:
-    """One retention pass: idle threads, then idle handoffs (same THREAD_TTL_DAYS). One failing does
-    not skip the other."""
+def _purge_once(memory: Memory, handoffs: HandoffStore | None, traces=None) -> None:
+    """One retention pass: idle threads, then idle handoffs, then old traces (same THREAD_TTL_DAYS).
+    One failing does not skip the others."""
     try:
         memory.purge_expired()
     finally:
-        if handoffs is not None:
-            handoffs.purge_expired(memory.ttl_days)
+        try:
+            if handoffs is not None:
+                handoffs.purge_expired(memory.ttl_days)
+        finally:
+            if traces is not None:
+                traces.purge_expired(memory.ttl_days)
 
 
-async def _purge_loop(memory: Memory, every_seconds: float, handoffs: HandoffStore | None = None) -> None:
-    """Retention: delete idle threads and handoffs now and then. A failed pass is logged and tried again."""
+async def _purge_loop(memory: Memory, every_seconds: float, handoffs: HandoffStore | None = None,
+                      traces=None) -> None:
+    """Retention: delete idle threads, handoffs and old traces now and then. A failed pass is logged and tried again."""
     while True:
         await asyncio.sleep(every_seconds)
         try:
-            await asyncio.to_thread(_purge_once, memory, handoffs)
+            await asyncio.to_thread(_purge_once, memory, handoffs, traces)
         except Exception:  # noqa: BLE001 - never kill the loop
             log.exception("Thread purge failed")
 
@@ -62,6 +68,7 @@ async def lifespan(app: FastAPI):
     validate_jwt_secret(get_settings().jwt_secret)  # fail fast: never serve with a weak secret
     memory = None
     handoffs = None
+    traces = None
     purge_task = None
     if getattr(app.state, "service", None) is None:  # tests set their own service
         from app.graph import build_default_graph
@@ -83,16 +90,22 @@ async def lifespan(app: FastAPI):
         else:
             _warn_if_unimported(s.handoffs_file)
         notifier = FanOutNotifier(handoffs, AuditNotifier(s.handoffs_file))
+        try:  # traces are optional: without the file the API still answers, just without stored traces
+            from app.observability import TraceStore
+
+            traces = TraceStore(s.traces_db_path)
+        except Exception:  # noqa: BLE001
+            log.exception("Trace store %s could not be opened; traces will not be stored", s.traces_db_path)
         app.state.service = ChatService(build_default_graph(checkpointer=memory.saver, handoff_notifier=notifier),
-                                        memory=memory, handoffs=handoffs)
+                                        memory=memory, handoffs=handoffs, traces=traces)
         log.info("Conversation memory: %s (ttl %s days, max %s threads per user)", memory.path,
                  s.thread_ttl_days or "off", s.max_threads_per_user or "unlimited")
         if s.thread_ttl_days:
             try:
-                _purge_once(memory, handoffs)  # at startup
+                _purge_once(memory, handoffs, traces)  # at startup
             except Exception:  # noqa: BLE001 - a purge problem must not stop the API
                 log.exception("Startup thread purge failed")
-            purge_task = asyncio.create_task(_purge_loop(memory, s.purge_interval_minutes * 60, handoffs))
+            purge_task = asyncio.create_task(_purge_loop(memory, s.purge_interval_minutes * 60, handoffs, traces))
         n = collection_size()
         if n == 0:
             log.warning("Knowledge base is EMPTY. Run `python -m app.rag.ingest` "
@@ -110,6 +123,8 @@ async def lifespan(app: FastAPI):
             memory.close()  # flush the WAL, release the file
         if handoffs is not None:
             handoffs.close()
+        if traces is not None:
+            traces.close()
 
 
 app = FastAPI(title="Getnet Multi-Agent Support", version="1.1.0", lifespan=lifespan)
@@ -271,3 +286,24 @@ def operator_reject(handoff_id: str, req: RejectRequest, operator: Principal = D
         raise _handoff_not_found() from e
     except HandoffConflict as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+# ---- observability: aggregates of the stored traces (no conversation text is stored or returned) ----
+
+def _epoch(value: datetime | None) -> float | None:
+    if value is None:
+        return None
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+
+
+@app.get("/operator/metrics", response_model=MetricsResponse)
+def operator_metrics(since: datetime | None = None, until: datetime | None = None,
+                     operator: Principal = Depends(require_operator)) -> MetricsResponse:
+    """Requests, latency p50/p95, degraded and handoff rates, provider errors, and tokens and estimated cost
+    per node and per model, over the turns with since <= time < until (ISO 8601; no zone = UTC)."""
+    service = getattr(app.state, "service", None)
+    found = service.metrics(_epoch(since), _epoch(until)) if service is not None else None
+    if found is None:
+        raise HTTPException(status_code=503, detail="Metrics are not available (no trace store).")
+    return MetricsResponse(**found, since=since.isoformat() if since else None,
+                           until=until.isoformat() if until else None)

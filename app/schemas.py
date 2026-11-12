@@ -93,6 +93,23 @@ class OpenHandoff(BaseModel):
     status: HandoffStatusName
 
 
+class NodeUsage(BaseModel):
+    node: str  # LangGraph node: summarize, router, knowledge, support, synthesizer
+    model: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float | None = None  # null when the model has no price, never 0
+
+
+class Usage(BaseModel):
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float | None = None  # null if any call of the turn used a model without a price
+    by_node: list[NodeUsage] = []
+
+
 class ChatResponse(BaseModel):
     response: str
     user_id: str
@@ -107,6 +124,7 @@ class ChatResponse(BaseModel):
     operator_messages: list[OperatorMessage] = []  # human replies not delivered before, delivered once here
     latency_ms: int
     trace_id: str
+    usage: Usage | None = None  # tokens and estimated cost of this turn (LLM calls of every node)
 
 
 class ConversationInfo(BaseModel):
@@ -203,3 +221,45 @@ class ReplyResult(HandoffDetail):
 class HandoffList(BaseModel):
     handoffs: list[HandoffSummary]
     count: int
+
+
+class GroupMetrics(BaseModel):
+    calls: int
+    errors: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float | None = None
+    unpriced_calls: int = 0
+
+
+class NodeMetrics(GroupMetrics):
+    node: str
+
+
+class ModelMetrics(GroupMetrics):
+    model: str
+
+
+class ToolMetrics(BaseModel):
+    name: str
+    calls: int
+    errors: int
+
+
+class MetricsResponse(BaseModel):
+    since: str | None = None
+    until: str | None = None
+    requests: int
+    latency_ms_p50: int | None = None
+    latency_ms_p95: int | None = None
+    degraded_rate: float | None = None
+    handoff_rate: float | None = None
+    provider_errors: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float | None = None
+    unpriced_llm_calls: int
+    by_node: list[NodeMetrics]
+    by_model: list[ModelMetrics]
+    tools: list[ToolMetrics]
+    prices_as_of: str

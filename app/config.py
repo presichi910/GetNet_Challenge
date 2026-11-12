@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     summary_threshold: int = 12
     summary_timeout_seconds: float = 20.0
 
+    # observability (app/observability.py): per-turn traces and spans (ids, tokens, cost, timings; no text)
+    traces_db_path: str = "./data/traces.sqlite"
+    # extra or corrected prices, JSON {model: [usd_per_1M_input, usd_per_1M_output]}
+    model_prices_json: str = ""
+    # a turn above either limit logs a WARNING "ALERT ..." (0 = off). A whole turn on gpt-oss-120b is ~2-10K
+    # tokens and well under a cent, so these only fire on a runaway turn
+    max_turn_tokens: int = 30000
+    max_turn_cost_usd: float = 0.02
+
     log_level: str = "INFO"
 
 

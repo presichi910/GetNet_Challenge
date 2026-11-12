@@ -312,6 +312,24 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
 - **Backup.** Same commands as above (`tar` through a throwaway container). Stop the API first: it flushes the WAL on shutdown, so the `.sqlite` file is then complete. Copying the file while the API runs can miss what is still in the `-wal` file.
 - **Tuning.** All of this is read from the environment (`.env.example` lists the variables). A shorter window or summary threshold costs fewer tokens per turn but forgets sooner.
 
+## Observability
+
+Every `/chat` turn is measured without touching a prompt or a node: `ChatService` attaches a LangChain callback handler (`app/observability.py`, `TurnCollector`) to that one `graph.invoke`, and it sees every LLM and tool call of every node, including the calls of the nested tool agents.
+
+- **What is recorded.** Per LLM call: the LangGraph node (`router`, `support`, `knowledge`, `synthesizer`, `summarize`), the model, input and output tokens (`usage_metadata`, reported by both ChatGroq and ChatOpenAI/Fireworks), latency and the error type (class and HTTP status, never the error text). Per tool call: name, latency and ok/error, never its arguments or result.
+- **Cost.** A price table in `app/observability.py` (USD per million tokens, list prices of 2026-11-12 from the Fireworks and Groq pricing pages) for `accounts/fireworks/models/gpt-oss-120b`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b` and the judge `qwen/qwen3.8-27b`. `MODEL_PRICES_JSON` adds or corrects prices. A model without a price has cost `null`, never 0, and a warning is logged once (Fireworks does not price `gpt-oss-20b` because it does not serve it serverless). These are estimates from list prices, not the provider's bill.
+- **In the response.** `/chat` has a new `usage` field: `{input_tokens, output_tokens, total_tokens, cost_usd, by_node: [{node, model, calls, input_tokens, output_tokens, cost_usd}]}`. Every other field is unchanged.
+- **Stored traces.** `TRACES_DB_PATH` (default `data/traces.sqlite`, in the `data` volume in Docker): one row per turn (`traces`: trace id, user, conversation, time, latency, plan, degraded, handoff reason, tokens, cost, provider errors) and one per call (`spans`). **No message, answer or tool result is stored**; a test reads the raw bytes of the file and its `-wal` to check it. `DELETE /conversations/{id}` erases that conversation's traces, and the retention pass erases traces older than `THREAD_TTL_DAYS`. If the store fails, the turn still answers 200 and a warning is logged.
+- **Metrics.** `GET /operator/metrics?since=&until=` (role `operator`, scope `operator`; a merchant gets 403), times in ISO 8601 (no zone = UTC): requests, latency p50/p95, degraded and handoff rates, provider errors, tokens and cost per node and per model, and tool calls/errors.
+
+  ```bash
+  OP=$(python -m scripts.issue_token --role operator --operator ops1)
+  curl -s -H "Authorization: Bearer $OP" "localhost:8000/operator/metrics?since=2026-11-12T00:00:00"
+  ```
+- **Logs and alerts.** The one log line per request keeps its fields and ends with `tokens=<n> cost_usd=<usd>`. A turn above `MAX_TURN_TOKENS` (30000) or `MAX_TURN_COST_USD` (0.02), or one that got a 429 from the provider, logs a `WARNING` line starting with `ALERT` (`ALERT turn_tokens 31200 > 30000 trace=... user=... conv=...`), ready for a log-based alert rule.
+- **Eval.** Every case of the report shows its tokens and cost, and the summary shows tokens per model (agents and judge apart) and the estimated total cost.
+- **Not done.** No visual dashboards, no OpenTelemetry/Langfuse export and no alert delivery (the `ALERT` lines are where a log-based rule would hook in). The metrics come from one SQLite file, fine for one worker; a real deployment would export the same spans to OTel.
+
 ## Limitations
 
 - Conversation memory persists (SQLite in the `data` volume) but there is **no encryption at rest**, and it assumes one uvicorn worker. See "Conversation memory".
@@ -325,7 +343,7 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
 - The KB is only as good as the crawl. There's little troubleshooting content, so those answers are generic. Adding help-center URLs to `app/rag/sources.py` would help the most.
 - The LLM judge isn't ground truth, so spot-check the answers.
 - Auth is a demo: HS256 with a shared secret and tokens from a local script. A real deployment needs an identity provider (RS256/JWKS). There are no refresh tokens, revocation or rate limiting.
-- Not done: guardrails, tracing/dashboards.
+- Not done: guardrails, visual dashboards, OpenTelemetry/Langfuse export and alert delivery (traces, tokens, cost, metrics and `ALERT` log lines are done, see "Observability").
 
 ## Layout
 
