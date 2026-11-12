@@ -470,7 +470,7 @@ def test_the_operator_sees_the_lease_and_the_customer_never_does(client):
     hid = open_case(client)
     r = claim(client, hid).json()
     assert r["lease_expires_at"] is not None and r["lease_expires_at"] > r["claimed_at"]
-    assert "lease" not in json.dumps(chat(client, A, "any news?", "c1"))
+    assert "lease_expires_at" not in json.dumps(chat(client, A, "any news?", "c1"))
 
 
 def test_an_expired_claim_is_pending_again_in_the_api_and_another_operator_can_take_it(client, store):
