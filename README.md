@@ -121,7 +121,7 @@ A few things I learned while building it:
 ## Tests and evaluation
 
 ```bash
-pytest -q                            # 140 tests, no network or keys needed (also: pytest -m "not eval")
+pytest -q                            # 154 tests, no network or keys needed (also: pytest -m "not eval")
 docker compose run --rm eval         # full evaluation (needs keys + KB)
 python -m eval.run_eval --only q05   # just some cases
 ```
@@ -130,9 +130,39 @@ The tests cover tools, router, ingestion, the API, authentication (valid, expire
 
 The evaluation has 17 cases (10 from the challenge + extras + 3 handoff cases). Each one checks routing, tool use and handoff, and an LLM judge (different model family) scores relevance, groundedness, completeness and tone. Reports go to `eval/reports/latest.md`.
 
-**Provider errors are not verdicts.** If a case hits a rate limit, an exhausted quota or an outage (in the router, an agent or the synthesizer), it is marked `error`, skipped by the judge and left out of every metric, and the report lists it so it can be re-run (`--only <id>`). A run with provider errors does not overwrite `latest.md`. Model failures (e.g. a broken tool call) still count against the system.
+**Provider errors are not verdicts.** A per-minute rate limit is waited out and the case retried (`--retries`, default 2). A daily quota is never retried. If a case still ends with a rate limit, an exhausted quota or an outage (in the router, an agent or the synthesizer), it is marked `error`, skipped by the judge and left out of every metric, and the report lists it so it can be re-run (`--only <id>`). A run with provider errors, or a partial run (`--only`), does not overwrite `latest.md`. Model failures (e.g. a broken tool call) still count against the system. Every report states which model ran each role.
 
-Latest report (`eval/reports/latest.md`): routing 100%, tools 100%, judge pass rate 93%, p50 6.8 s. The one failure was a factual slip that didn't repeat in 3 retries.
+### Models per role
+
+| Variable | Role | Default |
+|---|---|---|
+| `LLM_MODEL` | Knowledge agent | `openai/gpt-oss-120b` |
+| `LIGHT_MODEL` | Router, Support, Synthesizer | `openai/gpt-oss-20b` |
+| `JUDGE_MODEL` | Eval judge (a different model family) | `qwen/qwen3.8-27b` |
+
+They come from `.env`, `docker-compose.yml` passes them to the containers, and one run can override them: `LIGHT_MODEL=openai/gpt-oss-120b docker compose run --rm eval`. Groq's free tier limits tokens per model (gpt-oss: 8K per minute, 200K per day), so roles that share a model share one quota. That is why the light roles are on a different model than Knowledge.
+
+### Latest full report
+
+`eval/reports/latest.md` (2026-11-09, 14 of the 17 cases, before the authentication change): routing 100%, tools 100%, judge pass rate 93%, p50 6.8 s. The one failure was a factual slip that didn't repeat in 3 retries. The three handoff cases were not in that report.
+
+### Re-evaluation after the authentication change (2026-11-11)
+
+Nine Support/handoff cases (`q03 q05 q08 x01 x03 x04 h01 h02 h03`), one run each, so small differences are noise. Reports: `eval/reports/BASELINE-*.md`.
+
+| | default models | everything on `gpt-oss-120b` |
+|---|---|---|
+| Cases that ran | 9 of 9 | 8 of 9 (`h03`: daily quota ran out, marked `error`) |
+| Routing | 100% | 100% |
+| Tool use | 89% (`q08` fails) | 100% |
+| Handoff accuracy | 100% | 100% (`h03` not measured) |
+| Judge pass rate | 100% | 88% (`q05`: invented technical details) |
+| Groundedness / completeness | 98% / 89% | 92% / 95% |
+
+- `x04` (asking for another customer's data) is refused in both runs, and `h01`/`h02` always hand off.
+- `q08`: with `gpt-oss-20b` the Support agent calls only `get_terminal_status` and blames the Wi-Fi, although the data has two declined sales (codes 51 and 05) and the prompt says to always call `get_recent_transactions` for a decline. In the reports we have, Support on the 20b skipped that tool in 5 of 6 runs, and on the 120b it called it in 7 of 7 (six of those are from 11-08, before the light model existed, so only today's run is a controlled comparison). The judge passes the 20b answer because it never sees the transactions, so the tool check is the only signal.
+- Tokens measured in the 120b run (8 cases plus part of `h03`): about 39.9K on `gpt-oss-120b` and 9.2K on the judge. The Knowledge cases cost 9-13K each, so I estimate the full 17 cases at around 120K tokens, which needs a fresh daily quota.
+- **Pending** (both gpt-oss models ran out of daily quota that day): the regression check of the authentication commit with the default models (only `q03` ran before the 20b quota ended), the same cases on the commit before it, `h03` on the 120b, and the full 17-case run.
 
 Handoff behavior: explicit requests for a human always escalated. The unanswerable loan question escalated most of the time but not always, since the agent decides whether to call `escalate_to_human` (see Limitations).
 
@@ -142,6 +172,8 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
 - Customer data is fake.
 - Nothing reads the handoff queue. It's a file, so the "a human will follow up" message is not really backed by anyone yet. A real setup needs Slack/Teams/helpdesk behind `HandoffNotifier`.
 - Whether an agent escalates is the LLM's call, so it can miss sometimes.
+- With `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). Running Support on a bigger model fixes it in our runs, at the cost of 120b quota.
+- `qwen/qwen3.8-27b` works as the judge but not as an agent: it fails with "Request too large ... output tokens per minute" because the agents do not set `max_tokens`.
 - The KB is only as good as the crawl. There's little troubleshooting content, so those answers are generic. Adding help-center URLs to `app/rag/sources.py` would help the most.
 - The LLM judge isn't ground truth, so spot-check the answers.
 - Auth is a demo: HS256 with a shared secret and tokens from a local script. A real deployment needs an identity provider (RS256/JWKS). There are no refresh tokens, revocation or rate limiting.

@@ -32,6 +32,7 @@ HTTP service that answers Getnet customer messages by orchestrating specialised 
 | F21 | The app does not start with an empty, short or placeholder `JWT_SECRET` | `test_app_refuses_to_start_with_a_weak_secret` |
 | F22 | No tool exposes a parameter that selects a user (checked on the schema of every tool, found automatically) | `tests/test_tool_schemas.py` |
 | F23 | The eval marks provider errors (rate limit, quota, outage) as `error`: excluded from every metric, judge skipped, `latest.md` not overwritten | `tests/test_eval.py` (`test_provider_errors_do_not_count_in_any_metric`, ...) |
+| F24 | The eval waits out per-minute rate limits and retries, never retries a daily quota (checked on the full error text), states the model of each role in the report, and a partial run does not replace `latest.md` | `tests/test_eval.py` (`test_a_real_daily_quota_message_is_not_retried_...`, `test_the_report_says_which_models_ran_...`) |
 
 ## 3. Non-functional requirements
 
@@ -73,6 +74,7 @@ Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider 
 - Routing style: multi-step plan (chosen) vs single-agent vs supervisor loop.
 - Customer data: mock JSON in-process (chosen).
 - Memory: LangGraph `MemorySaver`, `thread_id = "<user_id>:<conversation_id>"` with `user_id` taken from the JWT (chosen).
+- Models: one variable per role (`LLM_MODEL` knowledge, `LIGHT_MODEL` router/support/synthesizer, `JUDGE_MODEL`), passed to the containers by docker-compose (chosen). Running Support on a larger model than `LIGHT_MODEL` is proposed in the README (`q08`) and not decided.
 - Identity: JWT HS256 with a shared secret for the demo (chosen); the id comes only from `sub`. Body `user_id` kept optional for compatibility with the original contract.
 - Evaluation: offline dataset + LLM judge (chosen).
 - Handoff action: ticket + local operator queue behind a pluggable notifier (chosen); no webhook yet.
