@@ -43,7 +43,10 @@ class Settings(BaseSettings):
 
     # support / handoff files
     tickets_file: str = "./data/tickets.jsonl"
-    handoffs_file: str = "./data/handoffs.jsonl"  # what a human operator would read
+    handoffs_file: str = "./data/handoffs.jsonl"  # audit copy of every handoff (and the source of the one-time import)
+    # the handoff queue the operators work through (claim / reply). Its own file: it does not depend on the
+    # conversation checkpointer, and the conversation retention purge never touches it
+    handoffs_db_path: str = "./data/handoffs.sqlite"
 
     # conversation memory: LangGraph checkpoints in one SQLite file (inside the data volume in Docker)
     checkpoint_db_path: str = "./data/checkpoints.sqlite"
