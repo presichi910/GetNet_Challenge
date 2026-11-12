@@ -173,10 +173,8 @@ T2=$(python -m scripts.issue_token --user cliente2024 | head -1)
 chat() { curl -s -X POST localhost:8000/chat -H "Authorization: Bearer $1" -H "Content-Type: application/json" -d "$2"; echo; }
 chat $T1 '{"message":"My name for this chat is Rafa. When will I receive my payout?","conversation_id":"del-1"}'
 curl -s localhost:8000/conversations/del-1 -H "Authorization: Bearer $T1"        # real history and turns
-curl -s -o /dev/null -w '%{http_code}
-' localhost:8000/conversations/del-1 -H "Authorization: Bearer $T2"   # 404, no tokens
-curl -s -o /dev/null -w '%{http_code}
-' -X DELETE localhost:8000/conversations/del-1 -H "Authorization: Bearer $T1"   # 204
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/conversations/del-1 -H "Authorization: Bearer $T2"   # 404, no tokens
+curl -s -o /dev/null -w '%{http_code}\n' -X DELETE localhost:8000/conversations/del-1 -H "Authorization: Bearer $T1"   # 204
 chat $T1 '{"message":"What name did I give you?","conversation_id":"del-1"}'
 ```
 
