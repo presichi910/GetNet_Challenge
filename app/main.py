@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Response
 
-from app.auth import Principal, require_scope, validate_jwt_secret
+from app.auth import Principal, require_merchant, validate_jwt_secret
 from app.config import get_settings
 from app.memory import Memory, ThreadLimitExceeded
 from app.schemas import (ChatRequest, ChatResponse, ConversationDetail, ConversationList,
@@ -83,7 +83,7 @@ def health() -> dict:
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, principal: Principal = Depends(require_scope("chat"))) -> ChatResponse:
+def chat(req: ChatRequest, principal: Principal = Depends(require_merchant)) -> ChatResponse:
     # the customer is the token's `sub`, a body user_id is never trusted
     if req.user_id is not None and req.user_id != principal.user_id:
         raise HTTPException(status_code=403, detail="user_id does not match the authenticated user.")
@@ -105,13 +105,13 @@ def _not_found() -> HTTPException:
 
 
 @app.get("/conversations", response_model=ConversationList)
-def list_conversations(principal: Principal = Depends(require_scope("chat"))) -> ConversationList:
+def list_conversations(principal: Principal = Depends(require_merchant)) -> ConversationList:
     items = app.state.service.list_conversations(principal.user_id)
     return ConversationList(conversations=items, count=len(items), limit=app.state.service.conversation_limit())
 
 
 @app.get("/conversations/{conversation_id}", response_model=ConversationDetail)
-def get_conversation(conversation_id: str, principal: Principal = Depends(require_scope("chat"))) -> ConversationDetail:
+def get_conversation(conversation_id: str, principal: Principal = Depends(require_merchant)) -> ConversationDetail:
     found = None
     if is_valid_conversation_id(conversation_id):
         found = app.state.service.get_conversation(principal.user_id, conversation_id)
@@ -121,7 +121,7 @@ def get_conversation(conversation_id: str, principal: Principal = Depends(requir
 
 
 @app.delete("/conversations/{conversation_id}", status_code=204)
-def delete_conversation(conversation_id: str, principal: Principal = Depends(require_scope("chat"))) -> Response:
+def delete_conversation(conversation_id: str, principal: Principal = Depends(require_merchant)) -> Response:
     deleted = False
     if is_valid_conversation_id(conversation_id):
         deleted = app.state.service.delete_conversation(principal.user_id, conversation_id)

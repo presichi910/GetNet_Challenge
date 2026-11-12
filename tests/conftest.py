@@ -61,3 +61,8 @@ def make_jwt(user: str = "cliente1988", scope: str | None = "chat", *, key: str 
 
 def bearer(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+def operator_jwt(operator: str = "ops1", scope: str | None = "operator", **kw) -> str:
+    """A token for support staff: role operator, scope operator."""
+    return make_jwt(operator, scope, role="operator", **kw)
