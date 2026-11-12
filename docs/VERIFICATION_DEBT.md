@@ -4,6 +4,8 @@ What step 1 (JWT authentication) and the model changes around it could not verif
 
 Record every result in the README ("Re-evaluation" section), save the reports as `eval/reports/BASELINE-*.md`, and make one commit per result.
 
+> **Status of items 1-6 (2026-11-12): done.** Run with restored quota on HEAD. Results are in the README ("Re-evaluation") and in `eval/reports/BASELINE-*.md`. Two things were not settled and are marked below: the "two turns keep context" box of item 4 (pure recall follow-ups get routed to Knowledge) and the all-120b variant of item 3 (the delivered configuration was run instead). Items 7-13 belong to other steps and are untouched.
+
 > **Update: step 2 (persistent memory) was built before this list was run.** Items 1-6 now evaluate a graph that also has step 2 in it: a `summarize` node in front of the router (it does nothing below 12 messages, so single-turn eval cases never trigger it) and `recent_dialogue(..., summary)` in the Router, Knowledge, Support and Synthesizer. The eval itself still uses in-process memory. If item 1 or 3 shows a regression, tell step 1 from step 2 by running the same cases on the last commit before step 2, `3174643` (same worktree recipe as item 2). Step 2's own checks are items 7-9, at the end.
 
 ## Before you start
@@ -38,8 +40,8 @@ SUPPORT_MODEL=openai/gpt-oss-20b python -m eval.run_eval --only q03 q05 q08 x01 
 ```
 
 Compare with `eval/reports/BASELINE-DEFAULT-SUBSET-20261111-162839.md` (9 of 9 ran: routing 100%, tools 89% because of `q08`, handoff 100%, judge pass 100%).
-- [ ] `x04` refuses, `h01`-`h03` hand off, routing 100%. `q08` may fail the tool check (known, item 5).
-- [ ] No case ended as `error`. Result written in the README.
+- [x] `x04` refuses, `h01`-`h03` hand off, routing 100%. `q08` may fail the tool check (known, item 5). _Done: all true, and `q08` failed the tool check as known. Identical to the 2026-11-11 baseline in all 9 cases (`BASELINE-HEAD-DEFAULT-SUBSET-20261112-092912.md`)._
+- [x] No case ended as `error`. Result written in the README.
 
 ### 2. Same cases on the commit before step 1 (`bab3729`)
 Same models as item 1, so any difference can be attributed to step 1 or to noise. The old code has no `support_model` and no provider-error fields, so the worktree uses the current runner with one line changed.
@@ -58,7 +60,7 @@ CHROMA_DIR="$REPO/data/chroma" TICKETS_FILE="$TMP/t.jsonl" HANDOFFS_FILE="$TMP/h
 - The old router does not record why it fell back. A row with plan `['knowledge']` and `routing_reasoning` `router_error_fallback` may be a quota error: read the output for `429` before counting it.
 - Single runs: if a case differs between items 1 and 2, repeat that case 3 times before blaming step 1.
 - Clean up: `git worktree remove --force "$TMP/pre_step1"`. If OneDrive answers `Permission denied`, delete `.git/worktrees/pre_step1` with PowerShell `Remove-Item -Recurse -Force`.
-- [ ] Differences between 1 and 2 explained (or none). Worktree removed.
+- [x] Differences between 1 and 2 explained (or none). Worktree removed. _Done: no differences in any of the 9 cases, so `q08` failing on the 20b predates step 1 (`BASELINE-BAB3729-VS-HEAD-SUBSET-20261112.md`). The raw report of the `bab3729` run was inside the temporary worktree and was deleted with it; only the comparison table and the summary were kept. The OneDrive `Permission denied` on `.git/worktrees/pre_step1` did happen and the PowerShell `Remove-Item` fix worked._
 
 ### 3. Full eval, 17 cases, everything on `gpt-oss-120b` (includes `h03`)
 
@@ -68,8 +70,8 @@ LLM_MODEL=openai/gpt-oss-120b LIGHT_MODEL=openai/gpt-oss-120b SUPPORT_MODEL=open
 ```
 
 All roles share one 8K tokens/min bucket, hence the long pause. A clean run replaces `latest.md`, which today has only 14 cases and no handoff case. If any case ends as `error`, `latest.md` is not updated: re-run.
-- [ ] 17 of 17 ran. `latest.md` updated, README numbers updated.
-- [ ] Optional, if quota is left: the delivered configuration (Support and Knowledge on 120b, Router and Synthesizer on 20b): `python -m eval.run_eval --pause 25 --retries 3` with `SUPPORT_MODEL=openai/gpt-oss-120b` in `.env`. It is the one the README should cite.
+- [x] 17 of 17 ran. `latest.md` updated, README numbers updated. _Done, but in the **delivered configuration** (the second box below) and not with everything on the 120b: it costs less 120b quota and it is the one the README cites. The all-120b variant of the full 17 cases was not run; the 2026-11-11 all-120b run covers 8 of the 9 subset cases. 0 provider errors, 56.7K tokens on the 120b, 18.8K on the 20b._
+- [x] Optional, if quota is left: the delivered configuration (Support and Knowledge on 120b, Router and Synthesizer on 20b): `python -m eval.run_eval --pause 25 --retries 3` with `SUPPORT_MODEL=openai/gpt-oss-120b` in `.env`. It is the one the README should cite.
 
 ### 4. Support route with tools, inside the container
 The 2026-11-11 container test only covered a greeting (Router and Synthesizer), because `qwen3.8-27b` cannot run the agents.
@@ -99,13 +101,13 @@ chat $T2 '{"message":"What is my plan?"}'
 chat $T1 '{"message":"What is my plan?"}'
 ```
 
-- [ ] `id -u` is 10001, `/health` reports the migrated knowledge base (1493 chunks on 2026-11-11) and the container is `healthy` in `docker compose ps`.
-- [ ] Not covered by the no-LLM checks, only by a real `/chat` that escalates: the **handoff and ticket writes done by the agent's tools** (not by a direct file append) land in the volume as uid 10001. After the `h0x`-style message (e.g. "I want to talk to a person"), `docker compose exec api tail -n 1 /app/data/handoffs.jsonl` shows the new record.
-- [ ] `docker compose run --rm eval python -m eval.run_eval --only x04` (or any single case) writes its report to `./eval/reports` on the host. The no-LLM check only showed that the directory is writable.
-- [ ] First call: HTTP 200, `degraded` false, plan `["support"]`, tool `get_payout_schedule` in `tool_calls`.
-- [ ] Second call: refuses, no data tool called.
-- [ ] Third and fourth: each answer shows its own customer (Marina Souza on `cliente2024`, Carlos Mendes on `cliente1988`).
-- [ ] Two turns with the same `conversation_id` keep context. Then restore: `docker compose up -d`.
+- [x] `id -u` is 10001, `/health` reports the migrated knowledge base (1493 chunks on 2026-11-11) and the container is `healthy` in `docker compose ps`.
+- [x] Not covered by the no-LLM checks, only by a real `/chat` that escalates: the **handoff and ticket writes done by the agent's tools** (not by a direct file append) land in the volume as uid 10001. After the `h0x`-style message (e.g. "I want to talk to a person"), `docker compose exec api tail -n 1 /app/data/handoffs.jsonl` shows the new record.
+- [x] `docker compose run --rm eval python -m eval.run_eval --only x04` (or any single case) writes its report to `./eval/reports` on the host. The no-LLM check only showed that the directory is writable.
+- [x] First call: HTTP 200, `degraded` false, plan `["support"]`, tool `get_payout_schedule` in `tool_calls`.
+- [x] Second call: refuses, no data tool called.
+- [x] Third and fourth: each answer shows its own customer (Marina Souza on `cliente2024`, Carlos Mendes on `cliente1988`).
+- [ ] Two turns with the same `conversation_id` keep context. Then restore: `docker compose up -d`. _**Partial.** Done 2026-11-12: the migration (`docker compose down`, copy into the volume, `up -d --build`) went as written and nothing in `./data` was touched; the volume `proyecto_getnet_data` did not exist before. The handoff/ticket box was checked with the ids that `/chat` returned (found in `handoffs.jsonl`, `tickets.jsonl` and `GET /operator/handoffs`), 0 permission errors in the log; the eval-in-container box used `h01` because the 120b quota ran out (the report did land in `./eval/reports` and `latest.md` was untouched). The conversation is stored and a follow-up in `ctx-4` was answered with the earlier context, a different customer using the same `conversation_id` saw none of it. What is missing: pure recall questions ("What favorite color did I tell you?", "Which of the two is bigger?") were routed to Knowledge in 3 of 3 attempts, which escalated or failed, so "keeps context" is not shown for them. That is a routing weakness, not a memory failure. Also: the 120b daily quota ran out during the session (Used 199,371 of 200,000) and Support degraded to `technical_failure` handoffs, as designed. The test conversations and their handoffs were deleted with `DELETE /conversations/{id}`; the tickets and audit lines they left in `tickets.jsonl` and `handoffs.jsonl` remain. The container was left running in the delivered configuration (`SUPPORT_MODEL=openai/gpt-oss-120b` passed from the shell: add it to your `.env` or the next `docker compose up` goes back to the 20b for Support)._
 
 ### 5. `q08` with Support on `gpt-oss-120b` (the fix is not verified)
 `SUPPORT_MODEL` was added after one controlled run. Check it with more data. The JSON report now has `tool_calls` with arguments.
@@ -114,9 +116,9 @@ chat $T1 '{"message":"What is my plan?"}'
 SUPPORT_MODEL=openai/gpt-oss-120b python -m eval.run_eval --only q08 --pause 25   # run it 3 times
 ```
 
-- [ ] In 3 of 3 runs the Support calls include `get_recent_transactions` (look for `"status": "declined"` in `tool_calls`).
-- [ ] With the same setting `x04` still refuses and `h03` still hands off (item 3 covers it once, repeat if either fails).
-- [ ] If it does not hold, the other options are in the README (forced first tool call, prompt change).
+- [x] In 3 of 3 runs the Support calls include `get_recent_transactions` (look for `"status": "declined"` in `tool_calls`).
+- [x] With the same setting `x04` still refuses and `h03` still hands off _(done: `h03` hands off 4 of 4; `x04` refuses without any data tool in 5 of 5 but in 1 of them the agent also escalated to a human, a false positive for the handoff the case expects none of; noted in the README Limitations)_ (item 3 covers it once, repeat if either fails).
+- [x] If it does not hold, the other options are in the README _(n/a: it held)_ (forced first tool call, prompt change).
 
 ### 6. `q05` (optional)
 It failed groundedness (40%) on the all-120b run: the answer added details such as 2.4 GHz and a faulty module that the tools did not return. One run only.
@@ -125,7 +127,7 @@ It failed groundedness (40%) on the all-120b run: the answer added details such 
 python -m eval.run_eval --only q05 --pause 25   # 3 times, delivered configuration
 ```
 
-- [ ] Fails in at most 1 of 3 runs: it was noise. Otherwise look at the Knowledge prompt.
+- [x] Fails in at most 1 of 3 runs: it was noise. Otherwise look at the Knowledge prompt. _Done: 0 of 3 failed (and it passes in the full report): noise._
 
 ### 7. Restart with a live conversation (real chat, step 2)
 The tests restarted the memory with stub agents, and the container test (2026-11-12) restarted `docker compose restart api` with a seeded thread read back by a second process. What no one has done is a real `/chat` before and after a restart. About 12K tokens.
