@@ -34,6 +34,14 @@ HTTP service that answers Getnet customer messages by orchestrating specialised 
 | F23 | The eval marks provider errors (rate limit, quota, outage) as `error`: excluded from every metric, judge skipped, `latest.md` not overwritten | `tests/test_eval.py` (`test_provider_errors_do_not_count_in_any_metric`, ...) |
 | F24 | The eval waits out per-minute rate limits and retries, never retries a daily quota (checked on the full error text), states the model of each role in the report, and a partial run does not replace `latest.md` | `tests/test_eval.py` (`test_a_real_daily_quota_message_is_not_retried_...`, `test_the_report_says_which_models_ran_...`) |
 | F25 | The Support agent runs on `SUPPORT_MODEL` (empty = `LIGHT_MODEL`); Router and Synthesizer keep `LIGHT_MODEL`; compose and `.env.example` list every model variable | `tests/test_models.py` |
+| F26 | The JWT carries a `role` (`merchant` default, `operator`). An operator is 403 on `/chat` and `/conversations*` even with the `chat` scope; a merchant is 403 on `/operator/*` even with the `operator` scope; an unknown role is 401 | `tests/test_roles.py`, `tests/test_operator_api.py` (`test_a_merchant_is_403_on_every_operator_endpoint_...`, `test_an_operator_is_403_on_chat_...`) |
+| F27 | Handoffs are stored in SQLite (`HANDOFFS_DB_PATH`) with status `pending`, `claimed`, `resolved`; the JSONL stays as an audit copy; the old JSONL is imported at startup, idempotently | `tests/test_handoff_store.py` (`test_import_...`), `test_startup_imports_the_old_queue_once_...` |
+| F28 | `GET /operator/handoffs?status=` lists oldest first; `claim` is pending to claimed, idempotent for the same operator, 409 for another one or a resolved handoff; unknown id is 404 | `tests/test_operator_api.py`, `tests/test_handoff_store.py` |
+| F29 | Transitions are atomic (`UPDATE ... WHERE status = ...` and rows counted): simultaneous claims have exactly one winner, through threads, separate connections and the API | `test_two_simultaneous_claims_...`, `test_many_operators_claiming_at_once_exactly_one_wins` |
+| F30 | `reply` (approve or reject, message up to 1000 characters, `idempotency_key`) is allowed only to the operator who claimed it; the same key repeats the result without a second message; another key on a resolved handoff, an unclaimed one or one held by another operator is 409 | `test_reply_...` in `tests/test_operator_api.py`, `tests/test_handoff_store.py` |
+| F31 | The operator message is stored in SQLite and delivered once in `operator_messages` of the next `/chat` of that conversation (and readable at `GET /conversations/{id}/operator-messages`); it is not added to the graph history | `test_full_flow_...`, `test_the_operator_message_never_enters_what_the_graph_sees` |
+| F32 | `/chat` shows `handoff.status` and the conversation's `open_handoffs`, never the operator's identity; a merchant only sees and receives their own conversations' data | `test_merchant_b_does_not_see_or_receive_...`, `test_a_merchant_response_never_carries_operator_identity_...` |
+| F33 | Every operator action (create, claim, reply) is stored in `handoff_events` with operator id and timestamp; refused attempts and replays are not recorded as actions | `test_every_operator_action_is_recorded_...` |
 
 ## 3. Non-functional requirements
 
@@ -69,7 +77,7 @@ Routing rules:
 Synthesizer: 0 outputs -> direct reply; 1 -> passthrough; 2+ -> merge; all failed -> static fallback.
 
 ## 5. Out of scope (for now)
-Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider (RS256/JWKS, refresh, revocation), rate limiting, real customer backend, an operator UI or a real notifier (Slack/Teams/helpdesk) for the handoff queue.
+Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider (RS256/JWKS, refresh, revocation), rate limiting, real customer backend, an operator UI, a real notifier (Slack/Teams/helpdesk) for the handoff queue, a claim timeout or reassignment, and retention of `handoffs.sqlite` / `handoffs.jsonl`.
 
 ## 6. Open decisions (resolved with the product owner)
 - Routing style: multi-step plan (chosen) vs single-agent vs supervisor loop.
@@ -78,5 +86,7 @@ Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider 
 - Models: one variable per role (`LLM_MODEL` knowledge, `LIGHT_MODEL` router/support/synthesizer, `JUDGE_MODEL`), passed to the containers by docker-compose (chosen). Support has its own `SUPPORT_MODEL` (default `LIGHT_MODEL`, set to `openai/gpt-oss-120b` in `.env.example`) because the 20b skips `get_recent_transactions` on declines (`q08`); a model change was chosen over a prompt change because the 20b is very sensitive to prompt wording. Not yet confirmed with a full eval (`docs/VERIFICATION_DEBT.md`).
 - Identity: JWT HS256 with a shared secret for the demo (chosen); the id comes only from `sub`. Body `user_id` kept optional for compatibility with the original contract.
 - Evaluation: offline dataset + LLM judge (chosen).
-- Handoff action: ticket + local operator queue behind a pluggable notifier (chosen); no webhook yet.
+- Handoff action: ticket + SQLite operator queue behind a pluggable notifier (chosen); operators work through `/operator/*` (claim, reply approve or reject), and the answer is delivered in the customer's next `/chat` turn. No webhook yet. See README, "Human oversight".
+- Operator reply delivery: stored in SQLite and returned as `operator_messages`, **not** injected into the graph history, so what the LLM sees does not change (chosen). The agents therefore do not know what the operator said.
+- Roles: a `role` claim (`merchant` default, `operator`) on top of the scopes; each endpoint family needs its own role (chosen).
 - Handoff triggers: explicit user request, technical failure, agent-reported low confidence (chosen); user frustration detection left out as too subjective to evaluate.

@@ -29,7 +29,7 @@ flowchart TD
 1. The router picks the agents (`support`, `knowledge`, both, or none) and detects the language. If both are needed, support goes first so knowledge can use what it found.
 2. Each agent uses tools. Support reads account data, knowledge searches the Getnet KB (Chroma) or the web (Tavily).
 3. The synthesizer builds the final reply: none ran → answers directly, one → passes it through, two → merges them.
-4. If the user asks for a person, or nobody could resolve it, the handoff node opens a ticket, saves a record in `data/handoffs.jsonl` (in the `data` volume when running in Docker, see Production hardening) and tells the user.
+4. If the user asks for a person, or nobody could resolve it, the handoff node opens a ticket, queues a record for the operators (SQLite, plus an audit copy in `data/handoffs.jsonl`; both in the `data` volume when running in Docker, see "Human oversight") and tells the user.
 
 The response also includes which agents ran, the tools they called and the sources, so it's easy to debug.
 
@@ -74,10 +74,10 @@ python -m scripts.issue_token --user cliente1988     # prints a token and an exa
 
 ## Authentication
 
-`POST /chat` requires `Authorization: Bearer <jwt>`. `GET /health` is public.
+`POST /chat` requires `Authorization: Bearer <jwt>`. `GET /health` is public. The token has a `role` (`merchant`, the default, or `operator`): see "Human oversight". The rest of this section is about merchants.
 
 - **Who is calling comes only from the token.** The JWT is verified with PyJWT: HS256 fixed in code (so `alg: none` or any other algorithm is rejected), signature, `exp`, `iss` and `aud`, and the claims `exp`, `iss`, `aud`, `sub` are required. The `sub` claim is the customer (`user_id`). It goes to the tools, the memory thread, the tickets, the handoff records and the logs. The LLM never chooses it: the tools are bound to it and take no user argument. The Support prompt does show the id (it comes from the verified token, never from the user's text) so the model can tell "my data" from someone else's. Removing it made the cross-customer refusal case (`x04`) fail in 5 of 5 runs of an A/B test.
-- **Status codes.** `401`: token missing, malformed, expired, bad signature, wrong issuer/audience or invalid `sub` (always the same generic message, the real reason is only in the server log). `403`: valid token without the `chat` scope (`scope` claim, space separated), or a body `user_id` that is not the token's. `404` on `/conversations/{id}`: the conversation does not exist **or is not yours** (same answer, on purpose).
+- **Status codes.** `401`: token missing, malformed, expired, bad signature, wrong issuer/audience or invalid `sub` (always the same generic message, the real reason is only in the server log). `403`: valid token without the `chat` scope (`scope` claim, space separated), with the wrong `role` (an operator token on `/chat`), or a body `user_id` that is not the token's. `404` on `/conversations/{id}`: the conversation does not exist **or is not yours** (same answer, on purpose).
 - **Body `user_id` is optional.** It's still accepted so clients that follow the original `{message, user_id}` contract keep working, but it is never used as identity: if present it must equal the token's `sub`.
 - **Conversations.** Optional `conversation_id` (`[A-Za-z0-9_.-]`, max 64) lets one customer have several conversations. The memory thread is `<sub>:<conversation_id>` (default `default`). The prefix always comes from the token, so nobody can read another customer's thread, whatever `conversation_id` they send. The threads are persistent, with a rolling summary, a retention period and a limit per customer: see "Conversation memory" below, which also lists the endpoints to list, read and delete your own conversations.
 - **The app won't start with a weak secret.** `JWT_SECRET` (plus `JWT_ISSUER`, `JWT_AUDIENCE`) comes from `.env`. Empty, shorter than 32 characters, repetitive or placeholder-looking values are rejected at startup.
@@ -109,6 +109,59 @@ A few things I learned while building it:
 - **The user only sees the handoff notice.** Whatever the unresolved agent found goes to the human, not the customer.
 - **A broken notifier never breaks the reply.**
 
+## Human oversight
+
+A handoff is a case a person works through, not a line in a file. Operators claim it, answer it, and the answer reaches the customer.
+
+```
+                claim (operator A)               reply (operator A)
+   pending ─────────────────────────▶ claimed ─────────────────────────▶ resolved
+      ▲                                  │  ▲                               (approve | reject)
+      │                                  │  └── claim again by A: same answer, nothing changes
+      │                                  └───── claim or reply by B: 409
+   created by the handoff node (reason, summary, whole record)
+```
+
+Every arrow is one SQL statement, `UPDATE ... WHERE status = <expected>` (plus `AND claimed_by = <me>` for the reply), and the rows it changed are counted. 1 means this caller won; 0 means somebody else got there first, and a read says whether it is a `409` or a `404`. That statement is what makes it exactly-once, not a lock in Python: two operators, two threads or two processes can race and SQLite lets one through (the tests race separate connections to the same file). `operator_messages.handoff_id` is also `UNIQUE`, so a handoff cannot deliver two messages even if the code were wrong.
+
+**Roles.** The JWT has a `role` claim: `merchant` or `operator`. A token without it is a merchant, an unknown value is `401`, so nothing becomes an operator by accident.
+
+| | merchant | operator |
+|---|---|---|
+| `/chat`, `/conversations*` | yes (scope `chat`) | **403**, even with the `chat` scope: an operator is not a merchant and has no conversations |
+| `/operator/*` | **403**, even with the `operator` scope | yes (scope `operator`) |
+| `sub` means | the merchant id (`user_id`) | the operator id, used in the audit trail |
+
+```bash
+python -m scripts.issue_token --role operator --operator ops1       # prints the token and an example curl
+```
+
+**Endpoints (operator only).** Times are ISO 8601 UTC. An id that does not exist or is malformed is `404`.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /operator/handoffs?status=pending&limit=100` | The queue, **oldest first**. `status` is `pending`, `claimed` or `resolved` (none = all), `limit` 1-500. One row per handoff: `id`, `merchant_id`, `conversation_id`, `reason`, `priority`, `summary`, `status`, `claimed_by`, `claimed_at`, `resolution`, `resolved_at`, `created_at`. |
+| `GET /operator/handoffs/{id}` | One handoff with the whole case (`record`: recent conversation, what the agents found, tool calls) and `operator_reply`. |
+| `POST /operator/handoffs/{id}/claim` | `pending` to `claimed`. `409` if another operator holds it or it is resolved. Claiming what you already hold is `200` with the same result. |
+| `POST /operator/handoffs/{id}/reply` | Body `{"decision": "approve" or "reject", "message": "...", "idempotency_key": "..."}`. `claimed` to `resolved`, only by the operator who claimed it. `409` if nobody claimed it, someone else did, or it is already resolved. Returns the handoff plus `replayed`. |
+
+`message` is 1-1000 characters, trimmed, with no control characters (`422` otherwise). `idempotency_key` is 8-64 characters of `[A-Za-z0-9_.-]`, one per attempt, chosen by the client (a uuid works).
+
+**Idempotency of the reply.** Repeating the same `idempotency_key` with the same decision and message returns the same result (`replayed: true`, same `resolved_at`) and stores nothing again, so retrying after a timeout is safe. The same key with another decision or message is `409`. Another key on a handoff that is already resolved is `409`. The key is checked together with the operator: it does not let a second operator in.
+
+**What the customer gets.**
+
+- The operator's message is saved in SQLite, tied to the conversation, **not** in the graph state or the checkpointer, so it survives any change of how conversations are stored.
+- It is delivered in the `operator_messages` field of the **next `/chat` response of that conversation**, once (it is marked delivered in the same transaction, so two simultaneous turns cannot both get it). `GET /conversations/{conversation_id}/operator-messages` lists all of them, delivered or not, without sending a turn. Each has `handoff_id`, `decision`, `message`, `created_at` and `sender: "human_operator"` so a client can label it.
+- It is **not** added to the conversation history the agents read. The LLM sees exactly what it saw before this feature, so no prompt or routing changed. The cost: if the customer's next question depends on what the operator said, the agents do not know it.
+- The handoff status is visible in `/chat`: `handoff.status` for the case opened in this turn, and `open_handoffs` (`[{"id", "status"}]`) for earlier cases of the conversation that are still `pending` or `claimed`. Nothing says who the operator is.
+
+**Security.** A merchant only gets data of their own conversations: every merchant-side query filters by the token's `sub`, and somebody else's conversation or handoff answers like a missing one (`404`). Operators see every merchant's handoffs; that is their job. Each action (create, claim, reply) is appended to the `handoff_events` table with the operator id and a timestamp, and logged; refused attempts and replays are not recorded as actions. If the queue breaks, the customer's `/chat` turn still works (the message just stays undelivered).
+
+**Storage and migration.** The queue is its own SQLite file, `HANDOFFS_DB_PATH` (default `data/handoffs.sqlite`, in the `data` volume), apart from the conversation checkpoints: the conversation retention purge never deletes it. `data/handoffs.jsonl` is still written for every new handoff as an **audit copy**. At startup the API imports that file into the queue: every record whose id is not there yet comes in as `pending`, the rest are skipped, so restarting changes nothing and a handoff somebody already answered is never reopened. A line that is not valid JSON or lacks `handoff_id`, `user_id` or `reason` is logged and skipped. Records from before this feature have no `conversation_id` and land in `default`. **Check that file before the first start:** the eval writes to it too (cases `h01`-`h03`), so test handoffs will show up in the operator queue.
+
+**What this does not do yet.** There is no operator UI (operators use the API), no notification when a handoff appears (a Slack/Teams `HandoffNotifier` is the place), no claim timeout (a handoff claimed by an operator who disappears stays claimed), no way to hand a claimed case to another operator, and no retention of `handoffs.sqlite`/`handoffs.jsonl` (they hold the recent conversation, in clear, and `DELETE /conversations/{id}` does not touch them).
+
 ## Design notes
 
 - **Plan first, then run.** One router call and then the agents run in order. Cheaper and more predictable than a supervisor loop, and easy to test.
@@ -121,12 +174,12 @@ A few things I learned while building it:
 ## Tests and evaluation
 
 ```bash
-pytest -q                            # 227 tests, no network or keys needed (also: pytest -m "not eval")
+pytest -q                            # 329 tests, no network or keys needed (also: pytest -m "not eval")
 docker compose run --rm eval         # full evaluation (needs keys + KB)
 python -m eval.run_eval --only q05   # just some cases
 ```
 
-The tests cover tools, router, ingestion, the API, authentication (valid, expired, forged, wrong scope, cross-customer attempts), handoff and the graph itself (real graph, stub agents). One test inspects the schema of every tool and fails if any exposes a parameter that selects a user (`user_id`, `customer`, `account`...), so the model can never choose whose data is read.
+The tests cover tools, router, ingestion, the API, authentication (valid, expired, forged, wrong scope or role, cross-customer attempts), the operator queue (claim/reply races, idempotency, who sees what), handoff and the graph itself (real graph, stub agents). One test inspects the schema of every tool and fails if any exposes a parameter that selects a user (`user_id`, `customer`, `account`...), so the model can never choose whose data is read.
 
 The evaluation has 17 cases (10 from the challenge + extras + 3 handoff cases). Each one checks routing, tool use and handoff, and an LLM judge (different model family) scores relevance, groundedness, completeness and tone. Reports go to `eval/reports/latest.md`.
 
@@ -197,13 +250,13 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
   ```
 
   Stop the API first (`docker compose stop api`) so Chroma is not copied while it writes. The backup is a file in your project folder: keep it out of git (it is not in `.gitignore` yet, so do not `git add .`) and out of OneDrive if it holds real customer data.
-- **Read the handoff queue and tickets from the volume:** `docker compose exec api cat /app/data/handoffs.jsonl`, or `docker compose cp api:/app/data/handoffs.jsonl .`. Running outside Docker still uses `./data`.
+- **Read the handoff queue and tickets from the volume:** as an operator, through `GET /operator/handoffs` (see "Human oversight"); the audit copy is `docker compose exec api cat /app/data/handoffs.jsonl`, or `docker compose cp api:/app/data/handoffs.jsonl .`. Running outside Docker still uses `./data`. `handoffs.sqlite` is in the same volume, so `down -v` deletes it too, and the backup commands above include it (stop the API first so its `-wal` file is folded in).
 - **CI** (`.github/workflows/ci.yml`, on push and pull request to `main`): `pytest` on Python 3.12 with a pip cache, no `.env` and no API keys (only a fake `JWT_SECRET` in the job), plus a `docker build` (no push) that fails if the container's uid is not 10001.
 
 ## Conversation memory
 
 - **Where.** LangGraph checkpoints in one SQLite file, `CHECKPOINT_DB_PATH` (default `data/checkpoints.sqlite`, so inside the named volume `data` in Docker). `SqliteSaver` (sync) on one shared connection, one uvicorn worker. The thread key is still `<sub>:<conversation_id>`. A `threads` table in the same file records the owner and the last activity of each thread. The API closes the file cleanly on shutdown. The eval keeps using in-process memory, so it never writes conversations to disk.
-- **Your own conversations (API).** Same authentication as `/chat` (JWT with the `chat` scope; there is no extra scope). The owner is always the token's `sub`: the path only holds a `conversation_id`, and a user in the path, query, body or header is ignored.
+- **Your own conversations (API).** Same authentication as `/chat` (JWT with role `merchant` and the `chat` scope; there is no extra scope). The owner is always the token's `sub`: the path only holds a `conversation_id`, and a user in the path, query, body or header is ignored.
 
   | Endpoint | Returns |
   |---|---|
@@ -211,7 +264,7 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
   | `GET /conversations/{id}` | The same metadata plus `messages` (`[{"role": "user" or "assistant", "content"}]`, no tool output) and `summary` (text, or null). It is what the thread still holds: after a rolling summary, only the recent window plus the summary. |
   | `DELETE /conversations/{id}` | `204`, no body. The thread is gone from the checkpoints and the registry, and its slot against the limit is free again (you can reuse the id for a new, empty conversation). Not undoable. |
 
-  A conversation that is somebody else's, one that does not exist and an id with a bad character or length all get the same `404 {"detail": "Conversation not found."}`, so the API never says whether a conversation exists. Without a token it is `401`, with a token without the `chat` scope `403`, as in `/chat`. `DELETE` does **not** touch what a handoff already copied: `handoffs.jsonl` and the tickets keep their own excerpt of the conversation. A `DELETE` while a turn of that same conversation is still running can leave that turn's checkpoints behind as orphans; the purge removes them (when `THREAD_TTL_DAYS` is not 0).
+  A conversation that is somebody else's, one that does not exist and an id with a bad character or length all get the same `404 {"detail": "Conversation not found."}`, so the API never says whether a conversation exists. Without a token it is `401`, with a token without the `chat` scope `403`, as in `/chat`. `DELETE` does **not** touch what a handoff already copied: `handoffs.sqlite`, `handoffs.jsonl` and the tickets keep their own excerpt of the conversation (and an operator reply to a deleted conversation is no longer readable through `/conversations/{id}/operator-messages`, which is then a `404`). A `DELETE` while a turn of that same conversation is still running can leave that turn's checkpoints behind as orphans; the purge removes them (when `THREAD_TTL_DAYS` is not 0).
 - **Rolling summary.** Above `SUMMARY_THRESHOLD` messages (default 12), the messages older than the last `HISTORY_WINDOW` (6) are folded into a `summary` with `LIGHT_MODEL` (never the Support model) and removed. Router and agents get the summary (as a system message) plus the recent window; with no summary their input is exactly what it was. If the summary call fails or exceeds `SUMMARY_TIMEOUT_SECONDS` (20, no retries), the turn goes on without it, a warning is logged and the next turn tries again. After every turn only the latest checkpoint of the thread is kept: LangGraph writes several per turn and `SqliteSaver.prune` is not implemented in the pinned version, so `Memory.prune_thread` does it in SQL. Without that, the table would grow with every turn and the removed messages would stay readable in old rows.
 - **Personal data at rest.** The checkpoints store the whole graph state: the conversation, the summary, `agent_outputs` and the raw results of the tools (profile, transactions, payouts). That is customer data in `checkpoints.sqlite`, in the Docker volume, in its `-wal` file and in every backup. **Nothing is encrypted**: protect the volume and the backups at the host level (disk encryption, access control). The same applies to `handoffs.jsonl` (it carries the last messages of the conversation) and `tickets.jsonl`, which neither the retention below nor `DELETE /conversations/{id}` covers.
 - **Retention.** `THREAD_TTL_DAYS` (default 30, 0 = never) counts days **without activity**. Idle threads are deleted by `thread_id` (checkpoints, writes and registry row) when the API starts and every `PURGE_INTERVAL_MINUTES` (60). Checkpoints without a registry row (an interrupted purge) are deleted too. Deleted rows are zeroed (`secure_delete` is on) and the write-ahead log is truncated after a `DELETE` or a purge, so the text is gone from the file and its `-wal`; tests search the raw bytes for it. **Backups keep what was purged or deleted**, and so does the host's own snapshotting: delete old backups on the same schedule.
@@ -223,7 +276,7 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
 
 - Conversation memory persists (SQLite in the `data` volume) but there is **no encryption at rest**, and it assumes one uvicorn worker. See "Conversation memory".
 - Customer data is fake.
-- Nothing reads the handoff queue. It's a file, so the "a human will follow up" message is not really backed by anyone yet. A real setup needs Slack/Teams/helpdesk behind `HandoffNotifier`.
+- The handoff queue has an API (see "Human oversight") but no operator UI, no notification when a case arrives and no claim timeout, so "a human will follow up" is only as true as somebody polling `/operator/handoffs`. A real setup needs Slack/Teams/helpdesk behind `HandoffNotifier`. The path from a real agent's handoff to the queue is tested with stub agents, not yet with the real LLM (`docs/VERIFICATION_DEBT.md`, item 11).
 - Whether an agent escalates is the LLM's call, so it can miss sometimes.
 - With `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). `SUPPORT_MODEL=openai/gpt-oss-120b` (the delivered setting) avoids it in the runs we have, at the cost of 120b quota, but it is not yet confirmed with a full eval.
 - `qwen/qwen3.8-27b` works as the judge but not as an agent: it fails with "Request too large ... output tokens per minute" because the agents do not set `max_tokens`.
@@ -236,13 +289,13 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
 
 ```
 app/
-  main.py auth.py service.py graph.py handoff.py state.py prompts.py config.py ...
+  main.py auth.py service.py graph.py handoff.py handoff_store.py state.py prompts.py config.py ...
   agents/   router, knowledge, support, synthesizer
   tools/    customer_tools, knowledge_tools, handoff_tools
   rag/      sources, ingest, store
   data/     customers.json, repository.py
 eval/       dataset.jsonl, judge.py, run_eval.py
-scripts/    issue_token.py (demo JWT)
+scripts/    issue_token.py (demo JWT, merchant or operator)
 tests/
 docs/
 ```

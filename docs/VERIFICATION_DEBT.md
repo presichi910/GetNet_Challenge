@@ -182,6 +182,27 @@ chat $T1 '{"message":"What name did I give you?","conversation_id":"del-1"}'
 - [ ] After the `DELETE`, the same `conversation_id` starts empty: the agent does **not** answer "Rafa".
 - [ ] Optional: ask for a human in that conversation (`I want to talk to a person`), then `DELETE` it. The conversation is gone, but the handoff record in `docker compose exec api tail -n 1 /app/data/handoffs.jsonl` still has its excerpt. That is documented, not a bug; decide whether the retention of `handoffs.jsonl` and `tickets.jsonl` is the next step.
 
+### 11. Human oversight with a real agent (step 4)
+Everything about the queue (claim, reply, idempotency, races, delivery, roles, import) is tested with stub agents and a fake LLM, 329 tests, no network. Step 4 changed no prompt, no agent and no routing (`git diff 087d50a^ -- app/prompts.py app/agents app/tools` is empty), so no eval regression is expected and none was run. What a real LLM has to confirm is that a handoff **it** decides on really reaches the queue, with the right conversation. About 3K tokens for `h01`/`h02` (they skip the agents) and ~10K for `h03`.
+
+```bash
+# the API container must be running with the new image (docker compose up -d --build api)
+TM=$(python -m scripts.issue_token --user cliente1988 | head -1)
+TO=$(python -m scripts.issue_token --role operator --operator ops1 | head -1)
+curl -s -X POST localhost:8000/chat -H "Authorization: Bearer $TM" -H "Content-Type: application/json"   -d '{"message":"I want to talk to a person","conversation_id":"ho-1"}'          # h01, note handoff.id and status
+curl -s "localhost:8000/operator/handoffs?status=pending" -H "Authorization: Bearer $TO"
+curl -s -X POST localhost:8000/operator/handoffs/<ID>/claim -H "Authorization: Bearer $TO"
+curl -s -X POST localhost:8000/operator/handoffs/<ID>/reply -H "Authorization: Bearer $TO" -H "Content-Type: application/json"   -d '{"decision":"approve","message":"Checked: your terminal is replaced.","idempotency_key":"manual-0001"}'
+curl -s -X POST localhost:8000/chat -H "Authorization: Bearer $TM" -H "Content-Type: application/json"   -d '{"message":"thanks","conversation_id":"ho-1"}'                               # operator_messages has the text, once
+```
+
+- [ ] `h01` (explicit request, any language) and `h02` appear in `GET /operator/handoffs?status=pending` with `merchant_id` = the token's customer and the `conversation_id` that was sent.
+- [ ] `h03` (the agent calls `escalate_to_human`) appears too, with `reason: agent_unresolved` and the agent's reason in `GET /operator/handoffs/{id}` (`record.tool_calls`). This is the only path where the agent, not the router, creates the handoff.
+- [ ] After the reply, the customer's next `/chat` returns the operator text in `operator_messages` once, with the real agents' own answer to "thanks" next to it, and a second `/chat` does not repeat it.
+- [ ] Optional: the same flow while `cliente2024` chats in a conversation with the same id: it gets nothing (tested with stubs, worth one look with the real stack).
+- [ ] **Before the first start of the new version**, look at `data/handoffs.jsonl`: it already holds the handoffs that the eval and manual tests wrote (85 lines when this was written), and the startup import loads all of them into the queue as `pending`. Delete or trim the file first if you do not want test cases in the operator queue. The eval itself keeps writing only to the JSONL, so it never touches the queue directly.
+- [ ] Container: `GET /operator/handoffs` answers `200` with an operator token and `403` with a customer token; `handoffs.sqlite` is in the `data` volume and the queue survives `docker compose restart api`. (Not run: the image was not rebuilt in this step.)
+
 ## Done when
 
 All boxes are ticked, or a line explains why not. Then step 2 can start.
