@@ -9,12 +9,13 @@ import contextlib
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 
 from app.auth import Principal, require_scope, validate_jwt_secret
 from app.config import get_settings
 from app.memory import Memory, ThreadLimitExceeded
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas import (ChatRequest, ChatResponse, ConversationDetail, ConversationList,
+                         is_valid_conversation_id)
 from app.service import ChatService
 
 log = logging.getLogger("api")
@@ -93,3 +94,38 @@ def chat(req: ChatRequest, principal: Principal = Depends(require_scope("chat"))
     except Exception as e:
         log.exception("Unhandled error in /chat")
         raise HTTPException(status_code=500, detail="Internal error while processing the request.") from e
+
+
+# ---- the caller's own conversations. Same auth as /chat. The owner comes from the token only: the
+# path holds a conversation_id, never a user. Somebody else's, a missing one and a malformed id all
+# answer the same 404, so the API never says whether a conversation exists. ----
+
+def _not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="Conversation not found.")
+
+
+@app.get("/conversations", response_model=ConversationList)
+def list_conversations(principal: Principal = Depends(require_scope("chat"))) -> ConversationList:
+    items = app.state.service.list_conversations(principal.user_id)
+    return ConversationList(conversations=items, count=len(items), limit=app.state.service.conversation_limit())
+
+
+@app.get("/conversations/{conversation_id}", response_model=ConversationDetail)
+def get_conversation(conversation_id: str, principal: Principal = Depends(require_scope("chat"))) -> ConversationDetail:
+    found = None
+    if is_valid_conversation_id(conversation_id):
+        found = app.state.service.get_conversation(principal.user_id, conversation_id)
+    if found is None:
+        raise _not_found()
+    return ConversationDetail(**found)
+
+
+@app.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(conversation_id: str, principal: Principal = Depends(require_scope("chat"))) -> Response:
+    deleted = False
+    if is_valid_conversation_id(conversation_id):
+        deleted = app.state.service.delete_conversation(principal.user_id, conversation_id)
+    if not deleted:
+        raise _not_found()
+    log.info("conversation deleted user=%s conv=%s", principal.user_id, conversation_id)
+    return Response(status_code=204)

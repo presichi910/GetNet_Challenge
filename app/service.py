@@ -5,7 +5,9 @@ import logging
 import time
 import uuid
 
-from langchain_core.messages import HumanMessage
+from datetime import datetime, timezone
+
+from langchain_core.messages import AIMessage, HumanMessage
 
 from app.schemas import DEFAULT_CONVERSATION, ChatResponse, HandoffInfo, Routing, Source, ToolCall
 
@@ -31,6 +33,40 @@ class ChatService:
             config={"configurable": {"thread_id": thread_id or thread_id_for(user_id)}, "recursion_limit": 25},
         )
         return state, int((time.perf_counter() - t0) * 1000)
+
+    # ---- the caller's own conversations. The owner is always the authenticated user_id; a thread that
+    # is somebody else's or does not exist is the same answer (None / False), so nothing leaks. ----
+
+    @staticmethod
+    def _iso(epoch: float) -> str:
+        return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+
+    def _info(self, meta: dict) -> dict:
+        return {"conversation_id": meta["conversation_id"], "created_at": self._iso(meta["created_at"]),
+                "last_active": self._iso(meta["last_active"]), "turns": meta["turns"]}
+
+    def conversation_limit(self) -> int | None:
+        return (self.memory.max_threads or None) if self.memory else None
+
+    def list_conversations(self, user_id: str) -> list[dict]:
+        return [self._info(m) for m in self.memory.list_threads(user_id)] if self.memory else []
+
+    def get_conversation(self, user_id: str, conversation_id: str) -> dict | None:
+        if not self.memory:
+            return None
+        thread_id = thread_id_for(user_id, conversation_id)
+        meta = self.memory.get_thread(user_id, thread_id)
+        if meta is None:
+            return None
+        values = self.graph.get_state({"configurable": {"thread_id": thread_id}}).values
+        messages = [{"role": "user" if isinstance(m, HumanMessage) else "assistant", "content": str(m.content)}
+                    for m in values.get("messages", []) if isinstance(m, (HumanMessage, AIMessage)) and m.content]
+        return {**self._info(meta), "summary": values.get("summary") or None, "messages": messages}
+
+    def delete_conversation(self, user_id: str, conversation_id: str) -> bool:
+        if not self.memory:
+            return False
+        return self.memory.delete_thread_for(user_id, thread_id_for(user_id, conversation_id))
 
     def handle(self, message: str, user_id: str, conversation_id: str | None = None) -> ChatResponse:
         """`user_id` must be the authenticated user. The memory thread is derived from it here."""

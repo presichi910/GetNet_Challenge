@@ -1,3 +1,6 @@
+import re
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 # Allowed characters for ids (ASCII only, no ":" so "<user_id>:<conversation_id>" is unambiguous).
@@ -7,6 +10,10 @@ USER_ID_MAX = 100
 CONVERSATION_ID_CHARS = r"[A-Za-z0-9_.-]+"
 CONVERSATION_ID_MAX = 64
 DEFAULT_CONVERSATION = "default"
+
+
+def is_valid_conversation_id(value: str) -> bool:
+    return 0 < len(value) <= CONVERSATION_ID_MAX and re.fullmatch(CONVERSATION_ID_CHARS, value) is not None
 
 
 class ChatRequest(BaseModel):
@@ -58,3 +65,29 @@ class ChatResponse(BaseModel):
     handoff: HandoffInfo | None = None  # set when a human takes over
     latency_ms: int
     trace_id: str
+
+
+class ConversationInfo(BaseModel):
+    """Metadata of one of the caller's conversations. Never any content."""
+
+    conversation_id: str
+    created_at: str  # ISO 8601, UTC
+    last_active: str  # ISO 8601, UTC
+    turns: int  # answered turns
+
+
+class ConversationList(BaseModel):
+    conversations: list[ConversationInfo]
+    count: int
+    limit: int | None = None  # max conversations per customer, None = no limit
+
+
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ConversationDetail(ConversationInfo):
+    # What the thread still holds: the recent window, plus a summary of what was folded away
+    summary: str | None = None
+    messages: list[HistoryMessage]
