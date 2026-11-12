@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# a newer push to the same branch/PR makes the older run pointless
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Fake, only for this job. The tests set their own secret; no real key is ever needed.
+      # There is no GROQ_API_KEY, TAVILY_API_KEY or VOYAGE_API_KEY and no .env file here:
+      # none of the tests calls an LLM or the network (the `eval` marker is deselected anyway).
+      JWT_SECRET: ci-only-fake-jwt-secret-0123456789-abcdefghij
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # same as the Dockerfile (python:3.12-slim)
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Tests
+        run: python -m pytest -q -m "not eval"
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image (no push)
+        run: docker build -t getnet-agents:ci .
+
+      - name: The container must not run as root
+        run: |
+          uid=$(docker run --rm --entrypoint id getnet-agents:ci -u)
+          echo "container uid: $uid"
+          test "$uid" = "10001"
