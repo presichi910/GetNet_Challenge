@@ -9,8 +9,10 @@ Three triggers:
 A retrieval score doesn't work as a trigger: answerable and unanswerable questions scored
 about the same (0.41-0.67 vs 0.37-0.50).
 
-On handoff we open a ticket (if the customer exists), write a record to the queue file
-and tell the user in their language. `HandoffNotifier` is where Slack/Teams would plug in.
+On handoff we open a ticket (if the customer exists), queue a record and tell the user in their
+language. `HandoffNotifier` is where Slack/Teams would plug in. The API queues into the SQLite
+`HandoffStore` (what operators claim and answer, see app.handoff_store) AND appends to the JSONL
+file, which stays as an audit copy. The node itself does not know which: it gets one notifier.
 """
 from __future__ import annotations
 
@@ -27,6 +29,8 @@ from langchain_core.messages import AIMessage
 from app.agents.common import recent_dialogue
 from app.config import get_settings
 from app.data.repository import CustomerRepository
+from app.handoff_store import case_summary
+from app.schemas import DEFAULT_CONVERSATION
 
 log = logging.getLogger("handoff")
 
@@ -94,6 +98,25 @@ class FileQueueNotifier:
                     record["handoff_id"], record["reason"], record["priority"], record["user_id"], record["ticket_id"])
 
 
+class FanOutNotifier:
+    """Send each record to several notifiers. Every one is tried even if another fails, and the
+    first failure is raised at the end (the node logs it, the customer still gets a reply)."""
+
+    def __init__(self, *notifiers: HandoffNotifier):
+        self.notifiers = notifiers
+
+    def notify(self, record: dict) -> None:
+        first_error: Exception | None = None
+        for n in self.notifiers:
+            try:
+                n.notify(record)
+            except Exception as e:  # noqa: BLE001
+                log.exception("Notifier %s failed for %s", type(n).__name__, record.get("handoff_id"))
+                first_error = first_error or e
+        if first_error:
+            raise first_error
+
+
 def compose_notice(reason: str, language: str, ref: str) -> str:
     lang = next((k for k in NOTICES if language.lower().startswith(k.lower()[:4])), "English")
     t = NOTICES[lang]
@@ -121,7 +144,8 @@ def make_handoff_node(repo: CustomerRepository | None = None, notifier: HandoffN
 
         record = {
             "handoff_id": handoff_id, "created_at": datetime.now(timezone.utc).isoformat(),
-            "user_id": user_id, "reason": reason, "priority": PRIORITY[reason], "ticket_id": ticket_id,
+            "user_id": user_id, "conversation_id": state.get("conversation_id") or DEFAULT_CONVERSATION,
+            "reason": reason, "priority": PRIORITY[reason], "ticket_id": ticket_id,
             "language": state.get("language", "English"), "user_message": last_user_msg,
             "conversation": [{"role": m.type, "content": m.content} for m in dialogue],
             "agent_findings": findings,
@@ -129,6 +153,7 @@ def make_handoff_node(repo: CustomerRepository | None = None, notifier: HandoffN
         }
         if state.get("summary"):  # the operator also needs what was said before the window
             record["earlier_summary"] = state["summary"]
+        record["case_summary"] = case_summary(record)  # one line for the operator's queue
         try:
             queue.notify(record)
         except Exception:  # noqa: BLE001 - the customer still gets a reply
@@ -140,7 +165,8 @@ def make_handoff_node(repo: CustomerRepository | None = None, notifier: HandoffN
         # (an unresolved agent once passed off a generic contract clause as "your loan's rate")
         answer = notice
 
-        info = {"id": handoff_id, "reason": reason, "priority": PRIORITY[reason], "ticket_id": ticket_id}
+        info = {"id": handoff_id, "reason": reason, "priority": PRIORITY[reason], "ticket_id": ticket_id,
+                "status": "pending"}
         return {"handoff": info, "final_answer": answer, "messages": [AIMessage(content=answer)]}
 
     return handoff_node

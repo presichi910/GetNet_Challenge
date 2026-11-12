@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.schemas import DEFAULT_CONVERSATION, ChatResponse, HandoffInfo, Routing, Source, ToolCall
+from app.schemas import (DEFAULT_CONVERSATION, ChatResponse, HandoffInfo, OpenHandoff, OperatorMessage, Routing,
+                         Source, ToolCall)
 
 log = logging.getLogger("chat")
 
@@ -21,15 +22,20 @@ def thread_id_for(user_id: str, conversation_id: str | None = None) -> str:
 
 
 class ChatService:
-    def __init__(self, graph, memory=None):
+    def __init__(self, graph, memory=None, handoffs=None):
         self.graph = graph
         self.memory = memory  # app.memory.Memory: thread registry (limit, owner, last activity)
+        # app.handoff_store.HandoffStore: the human queue. It is NOT part of the graph state or the
+        # checkpointer, so conversations can change storage without touching human oversight.
+        self.handoffs = handoffs
 
-    def run_raw(self, message: str, user_id: str, thread_id: str | None = None) -> tuple[dict, int]:
+    def run_raw(self, message: str, user_id: str, thread_id: str | None = None,
+                conversation_id: str | None = None) -> tuple[dict, int]:
         """Run the graph. Returns (state, latency_ms)."""
         t0 = time.perf_counter()
         state = self.graph.invoke(
-            {"messages": [HumanMessage(content=message)], "user_id": user_id},
+            {"messages": [HumanMessage(content=message)], "user_id": user_id,
+             "conversation_id": conversation_id or DEFAULT_CONVERSATION},
             config={"configurable": {"thread_id": thread_id or thread_id_for(user_id)}, "recursion_limit": 25},
         )
         return state, int((time.perf_counter() - t0) * 1000)
@@ -68,6 +74,39 @@ class ChatService:
             return False
         return self.memory.delete_thread_for(user_id, thread_id_for(user_id, conversation_id))
 
+    def operator_messages(self, user_id: str, conversation_id: str) -> list[dict] | None:
+        """Every operator message of the caller's own conversation, or None if the conversation is not
+        the caller's / does not exist (same answer for both). Never marks anything delivered."""
+        if not self.handoffs:
+            return None
+        if self.memory:
+            if self.memory.get_thread(user_id, thread_id_for(user_id, conversation_id)) is None:
+                return None
+        elif not self.handoffs.has_conversation(user_id, conversation_id):
+            return None
+        return [{**m, "created_at": self._iso(m["created_at"])}
+                for m in self.handoffs.messages_for_conversation(user_id, conversation_id)]
+
+    def _human_side(self, user_id: str, conversation_id: str, handoff: HandoffInfo | None):
+        """What the customer may learn about the humans: the status of this turn's handoff, the cases of
+        this conversation still open, and the operator messages not delivered yet (delivered now, once).
+        Every query is filtered by the token's user_id. A problem here never fails the turn: an
+        undelivered message simply stays undelivered and comes with the next one."""
+        if not self.handoffs:
+            return handoff, [], []
+        try:
+            if handoff:
+                handoff = handoff.model_copy(
+                    update={"status": self.handoffs.status_for(user_id, handoff.id) or handoff.status})
+            open_cases = [OpenHandoff(**h) for h in self.handoffs.open_for_conversation(user_id, conversation_id)
+                          if not handoff or h["id"] != handoff.id]
+            delivered = [OperatorMessage(**{**m, "created_at": self._iso(m["created_at"])})
+                         for m in self.handoffs.pop_undelivered(user_id, conversation_id)]
+            return handoff, open_cases, delivered
+        except Exception:  # noqa: BLE001
+            log.warning("could not read the handoff queue for user=%s conv=%s", user_id, conversation_id, exc_info=True)
+            return handoff, [], []
+
     def handle(self, message: str, user_id: str, conversation_id: str | None = None) -> ChatResponse:
         """`user_id` must be the authenticated user. The memory thread is derived from it here."""
         trace_id = uuid.uuid4().hex[:12]
@@ -76,7 +115,7 @@ class ChatService:
         # raises ThreadLimitExceeded for a new thread above the per-user limit, before anything runs
         created = self.memory.begin_turn(user_id, thread_id) if self.memory else False
         try:
-            state, latency_ms = self.run_raw(message, user_id, thread_id)
+            state, latency_ms = self.run_raw(message, user_id, thread_id, conversation_id)
         except Exception:
             if created:  # the first turn of a thread failed: do not keep its slot or its leftovers
                 self.memory.abort_new_thread(thread_id)
@@ -98,6 +137,9 @@ class ChatService:
                     seen.add(s["url"])
                     sources.append(Source(**s))
 
+        handoff, open_handoffs, operator_messages = self._human_side(
+            user_id, conversation_id, HandoffInfo(**state["handoff"]) if state.get("handoff") else None)
+
         resp = ChatResponse(
             response=state["final_answer"],
             user_id=user_id,
@@ -108,7 +150,9 @@ class ChatService:
             sources=sources,
             tool_calls=tool_calls,
             degraded=any(o.get("error") for o in outputs.values()),
-            handoff=HandoffInfo(**state["handoff"]) if state.get("handoff") else None,
+            handoff=handoff,
+            open_handoffs=open_handoffs,
+            operator_messages=operator_messages,
             latency_ms=latency_ms,
             trace_id=trace_id,
         )

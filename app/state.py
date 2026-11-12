@@ -23,6 +23,7 @@ class GraphState(TypedDict, total=False):
     # conversation memory (one thread per "<user_id>:<conversation_id>")
     messages: Annotated[list[AnyMessage], add_messages]
     user_id: str  # the authenticated user (JWT sub), set by the API, never by the LLM
+    conversation_id: str  # set by the API for the handoff record only, never shown to an LLM
     summary: str  # rolling summary of the messages already removed from `messages` ("" = none yet)
 
     # per-turn fields, the router resets them every turn

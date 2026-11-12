@@ -62,6 +62,8 @@ def test_the_body_user_id_of_a_still_cannot_open_the_thread_of_a(auth_env, mem):
 def test_lifespan_opens_the_sqlite_file_keeps_the_thread_across_restarts_and_closes_it(auth_env, monkeypatch, tmp_path):
     db = tmp_path / "data" / "checkpoints.sqlite"
     monkeypatch.setenv("CHECKPOINT_DB_PATH", str(db))
+    monkeypatch.setenv("HANDOFFS_DB_PATH", str(tmp_path / "data" / "handoffs.sqlite"))  # never the real ./data
+    monkeypatch.setenv("HANDOFFS_FILE", str(tmp_path / "data" / "handoffs.jsonl"))
     get_settings.cache_clear()
     opened = []
 
@@ -70,7 +72,7 @@ def test_lifespan_opens_the_sqlite_file_keeps_the_thread_across_restarts_and_clo
         return opened[-1]
 
     monkeypatch.setattr("app.memory.open_memory", spy_open)
-    monkeypatch.setattr("app.graph.build_default_graph", lambda checkpointer=None: make_graph(checkpointer))
+    monkeypatch.setattr("app.graph.build_default_graph", lambda checkpointer=None, **_: make_graph(checkpointer))
     monkeypatch.setattr("app.rag.store.collection_size", lambda: 1)
     app.state.service = None
     try:

@@ -56,9 +56,11 @@ def build_graph(router: Callable, knowledge: Callable, support: Callable, synthe
     return g.compile(checkpointer=checkpointer or MemorySaver())
 
 
-def build_default_graph(checkpointer=None):
+def build_default_graph(checkpointer=None, handoff_notifier=None):
     """`checkpointer=None` keeps the memory in process (the eval does that, so it never writes
-    conversations to disk). The API passes the persistent one, see `app.main.lifespan`."""
+    conversations to disk). The API passes the persistent one, see `app.main.lifespan`.
+    `handoff_notifier=None` only appends to the JSONL file; the API passes one that also queues the
+    handoff in the SQLite store the operators work from."""
     from app.agents.knowledge import make_knowledge_node
     from app.agents.router import make_router_node
     from app.agents.summarizer import make_summarizer_node
@@ -70,5 +72,5 @@ def build_default_graph(checkpointer=None):
 
     repo = CustomerRepository(tickets_file=get_settings().tickets_file)  # shared, so handoff tickets show up for Support
     return build_graph(make_router_node(), make_knowledge_node(), make_support_node(repo=repo),
-                       make_synthesizer_node(), make_handoff_node(repo=repo), checkpointer=checkpointer,
+                       make_synthesizer_node(), make_handoff_node(repo=repo, notifier=handoff_notifier), checkpointer=checkpointer,
                        summarizer=make_summarizer_node())

@@ -1,7 +1,7 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Allowed characters for ids (ASCII only, no ":" so "<user_id>:<conversation_id>" is unambiguous).
 # Used for the JWT `sub`, the optional body `user_id` and `conversation_id`.
@@ -10,6 +10,13 @@ USER_ID_MAX = 100
 CONVERSATION_ID_CHARS = r"[A-Za-z0-9_.-]+"
 CONVERSATION_ID_MAX = 64
 DEFAULT_CONVERSATION = "default"
+
+# human oversight
+HANDOFF_ID_PATTERN = r"HND-[A-Za-z0-9]{1,32}"  # what the handoff node generates: HND-3F9A1C
+OPERATOR_MESSAGE_MAX = 1000  # characters an operator may send to a customer
+IDEMPOTENCY_KEY_CHARS = r"[A-Za-z0-9_.-]+"
+IDEMPOTENCY_KEY_MIN, IDEMPOTENCY_KEY_MAX = 8, 64  # a uuid4 fits
+HandoffStatusName = Literal["pending", "claimed", "resolved"]
 
 
 def is_valid_conversation_id(value: str) -> bool:
@@ -51,6 +58,28 @@ class HandoffInfo(BaseModel):
     reason: str  # user_requested | technical_failure | agent_unresolved
     priority: str
     ticket_id: str | None = None
+    status: str = "pending"  # pending | claimed | resolved. Nothing about who is handling it
+
+
+def is_valid_handoff_id(value: str) -> bool:
+    return re.fullmatch(HANDOFF_ID_PATTERN, value) is not None
+
+
+class OperatorMessage(BaseModel):
+    """What a human operator answered about the customer's case. Never says who the operator is."""
+
+    handoff_id: str
+    decision: Literal["approve", "reject"]
+    message: str
+    created_at: str  # ISO 8601, UTC
+    sender: Literal["human_operator"] = "human_operator"  # clients label it, so it is never mistaken for the assistant
+
+
+class OpenHandoff(BaseModel):
+    """A case of this conversation that is still with the humans."""
+
+    id: str
+    status: HandoffStatusName
 
 
 class ChatResponse(BaseModel):
@@ -62,7 +91,9 @@ class ChatResponse(BaseModel):
     sources: list[Source] = []
     tool_calls: list[ToolCall] = []
     degraded: bool = False  # True if an agent failed
-    handoff: HandoffInfo | None = None  # set when a human takes over
+    handoff: HandoffInfo | None = None  # set when a human takes over (this turn), with its status
+    open_handoffs: list[OpenHandoff] = []  # earlier cases of this conversation still pending or claimed
+    operator_messages: list[OperatorMessage] = []  # human replies not delivered before, delivered once here
     latency_ms: int
     trace_id: str
 
@@ -91,3 +122,63 @@ class ConversationDetail(ConversationInfo):
     # What the thread still holds: the recent window, plus a summary of what was folded away
     summary: str | None = None
     messages: list[HistoryMessage]
+
+
+class StoredOperatorMessage(OperatorMessage):
+    delivered: bool  # already handed to the customer in a /chat response
+
+
+class OperatorMessageList(BaseModel):
+    conversation_id: str
+    messages: list[StoredOperatorMessage]
+
+
+# ---- /operator/* ----
+
+class ReplyRequest(BaseModel):
+    decision: Literal["approve", "reject"]
+    message: str = Field(min_length=1, max_length=OPERATOR_MESSAGE_MAX, description="Shown to the customer.")
+    idempotency_key: str = Field(min_length=IDEMPOTENCY_KEY_MIN, max_length=IDEMPOTENCY_KEY_MAX,
+                                 pattern=f"^{IDEMPOTENCY_KEY_CHARS}$",
+                                 description="Chosen by the client, e.g. a uuid. Repeating it repeats the result, not the message.")
+
+    @field_validator("message")
+    @classmethod
+    def _clean(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("message is empty")
+        if any(ord(c) < 32 and c not in "\n\t" for c in v):  # no control characters, they would reach the customer
+            raise ValueError("message contains control characters")
+        return v
+
+
+class HandoffSummary(BaseModel):
+    """One row of the operator queue."""
+
+    id: str
+    conversation_id: str
+    merchant_id: str
+    reason: str
+    priority: str
+    summary: str
+    status: HandoffStatusName
+    claimed_by: str | None = None
+    claimed_at: str | None = None
+    resolution: Literal["approve", "reject"] | None = None
+    resolved_at: str | None = None
+    created_at: str
+
+
+class HandoffDetail(HandoffSummary):
+    operator_reply: str | None = None
+    record: dict  # the full case: recent conversation, what the agents found, the tool calls
+
+
+class ReplyResult(HandoffDetail):
+    replayed: bool = False  # True: this idempotency_key was already applied, nothing was stored again
+
+
+class HandoffList(BaseModel):
+    handoffs: list[HandoffSummary]
+    count: int

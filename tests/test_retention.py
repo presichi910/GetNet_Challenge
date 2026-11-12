@@ -241,6 +241,9 @@ def test_the_api_answers_429_with_a_clear_message_and_runs_nothing(auth_env, db)
 
 def lifespan_env(monkeypatch, db, **env):
     monkeypatch.setenv("CHECKPOINT_DB_PATH", str(db))
+    # the handoff queue and its audit file next to the test database, never the real ./data
+    monkeypatch.setenv("HANDOFFS_DB_PATH", str(db.parent / "handoffs.sqlite"))
+    monkeypatch.setenv("HANDOFFS_FILE", str(db.parent / "handoffs.jsonl"))
     for k, v in env.items():
         monkeypatch.setenv(k, str(v))
     get_settings.cache_clear()
@@ -251,7 +254,7 @@ def lifespan_env(monkeypatch, db, **env):
         return opened[-1]
 
     monkeypatch.setattr("app.memory.open_memory", spy_open)
-    monkeypatch.setattr("app.graph.build_default_graph", lambda checkpointer=None: make_graph(checkpointer))
+    monkeypatch.setattr("app.graph.build_default_graph", lambda checkpointer=None, **_: make_graph(checkpointer))
     monkeypatch.setattr("app.rag.store.collection_size", lambda: 1)
     app.state.service = None
     return opened
