@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.handoff_store import HandoffConflict, HandoffNotFound, HandoffStore, iso
 from app.memory import Memory, ThreadLimitExceeded
 from app.schemas import (ChatRequest, ChatResponse, ConversationDetail, ConversationList, HandoffDetail,
-                         HandoffList, HandoffStatusName, HandoffSummary, OperatorMessageList, ReplyRequest,
+                         HandoffList, HandoffStatusName, HandoffSummary, OperatorMessageList, RejectRequest, ReplyRequest,
                          ReplyResult, is_valid_conversation_id, is_valid_handoff_id)
 from app.service import ChatService
 
@@ -241,3 +241,18 @@ def operator_reply(handoff_id: str, req: ReplyRequest, operator: Principal = Dep
     except HandoffConflict as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     return ReplyResult(**_detail(row), replayed=replayed)
+
+
+@app.post("/operator/handoffs/{handoff_id}/reject", response_model=HandoffDetail)
+def operator_reject(handoff_id: str, req: RejectRequest, operator: Principal = Depends(require_operator)) -> HandoffDetail:
+    """Give a case up. Only with a claim that is still valid (409 otherwise). `close: false` (default)
+    puts it back in the queue for another operator; `close: true` closes it without a message to the
+    customer. `reason` is recorded in the audit trail and is never shown to the customer."""
+    if not is_valid_handoff_id(handoff_id):
+        raise _handoff_not_found()
+    try:
+        return HandoffDetail(**_detail(_queue().release(handoff_id, operator.user_id, req.reason, req.close)))
+    except HandoffNotFound as e:
+        raise _handoff_not_found() from e
+    except HandoffConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e

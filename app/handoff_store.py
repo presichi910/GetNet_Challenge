@@ -325,6 +325,38 @@ class HandoffStore:
                 raise HandoffConflict("Claim the handoff before replying (it may have been released when your claim expired).")
             raise HandoffConflict("Claimed by another operator.")
 
+    def release(self, handoff_id: str, operator: str, reason: str, close: bool = False,
+                now: float | None = None) -> dict:
+        """The operator who holds a valid claim gives the case up (`reject` in the API).
+
+        close=False: the handoff goes back to pending, claimed_by cleared, for any operator to take.
+        close=True: it is resolved as `reject` with no message for the customer (spam, a duplicate, a
+        case that needs nothing). Either way `reason` goes to the audit trail (it is for the other
+        operators, never shown to the customer). Only with a claim that is still valid: same
+        HandoffNotFound / HandoffConflict as claim and reply."""
+        now = self._now(now)
+        with self._tx() as c:
+            self._expire(c, now)
+            if close:
+                cur = c.execute("UPDATE handoffs SET status = 'resolved', resolution = 'reject', resolved_at = ?, "
+                                "lease_expires_at = NULL WHERE id = ? AND status = 'claimed' AND claimed_by = ?",
+                                (now, handoff_id, operator))
+            else:
+                cur = c.execute("UPDATE handoffs SET status = 'pending', claimed_by = NULL, claimed_at = NULL, "
+                                "lease_expires_at = NULL WHERE id = ? AND status = 'claimed' AND claimed_by = ?",
+                                (handoff_id, operator))
+            if cur.rowcount == 1:  # we won
+                self._event(c, handoff_id, operator, "close" if close else "release", reason, now)
+                log.info("handoff %s id=%s operator=%s", "closed" if close else "released", handoff_id, operator)
+            else:
+                row = c.execute("SELECT status FROM handoffs WHERE id = ?", (handoff_id,)).fetchone()
+                if row is None:
+                    raise HandoffNotFound(handoff_id)
+                raise HandoffConflict({"resolved": "Already resolved.",
+                                       "pending": "You do not hold a claim on this handoff (it may have expired)."
+                                       }.get(row["status"], "Claimed by another operator."))
+            return self._full(c.execute("SELECT * FROM handoffs WHERE id = ?", (handoff_id,)).fetchone())
+
     def events(self, handoff_id: str) -> list[dict]:
         """The audit trail of one handoff, oldest first."""
         rows = self._read("SELECT at, actor, action, detail FROM handoff_events WHERE handoff_id = ? ORDER BY id",

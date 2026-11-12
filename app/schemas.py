@@ -1,7 +1,7 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator
 
 # Allowed characters for ids (ASCII only, no ":" so "<user_id>:<conversation_id>" is unambiguous).
 # Used for the JWT `sub`, the optional body `user_id` and `conversation_id`.
@@ -14,6 +14,7 @@ DEFAULT_CONVERSATION = "default"
 # human oversight
 HANDOFF_ID_PATTERN = r"HND-[A-Za-z0-9]{1,32}"  # what the handoff node generates: HND-3F9A1C
 OPERATOR_MESSAGE_MAX = 1000  # characters an operator may send to a customer
+REJECT_REASON_MAX = 500  # characters of the reason an operator gives for giving a case up
 IDEMPOTENCY_KEY_CHARS = r"[A-Za-z0-9_.-]+"
 IDEMPOTENCY_KEY_MIN, IDEMPOTENCY_KEY_MAX = 8, 64  # a uuid4 fits
 HandoffStatusName = Literal["pending", "claimed", "resolved"]
@@ -59,6 +60,16 @@ class HandoffInfo(BaseModel):
     priority: str
     ticket_id: str | None = None
     status: str = "pending"  # pending | claimed | resolved. Nothing about who is handling it
+
+
+def clean_text(v: str, what: str) -> str:
+    """Trim, refuse empty text and control characters (newline and tab are fine)."""
+    v = v.strip()
+    if not v:
+        raise ValueError(f"{what} is empty")
+    if any(ord(c) < 32 and c not in "\n\t" for c in v):
+        raise ValueError(f"{what} contains control characters")
+    return v
 
 
 def is_valid_handoff_id(value: str) -> bool:
@@ -145,12 +156,19 @@ class ReplyRequest(BaseModel):
     @field_validator("message")
     @classmethod
     def _clean(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("message is empty")
-        if any(ord(c) < 32 and c not in "\n\t" for c in v):  # no control characters, they would reach the customer
-            raise ValueError("message contains control characters")
-        return v
+        return clean_text(v, "message")
+
+
+class RejectRequest(BaseModel):
+    """An operator giving a case up. `reason` is for the other operators and the audit trail, not for the customer."""
+
+    reason: str = Field(min_length=1, max_length=REJECT_REASON_MAX)
+    close: StrictBool = Field(default=False, description="False: back to the queue. True: closed, nothing sent to the customer.")
+
+    @field_validator("reason")
+    @classmethod
+    def _clean(cls, v: str) -> str:
+        return clean_text(v, "reason")
 
 
 class HandoffSummary(BaseModel):
