@@ -111,18 +111,21 @@ A few things I learned while building it:
 
 ## Human oversight
 
-A handoff is a case a person works through, not a line in a file. Operators claim it, answer it, and the answer reaches the customer.
+A handoff is a case a person works through, not a line in a file. Operators claim it, answer it, and the answer reaches the customer and the agents.
 
 ```
-                claim (operator A)               reply (operator A)
-   pending ─────────────────────────▶ claimed ─────────────────────────▶ resolved
-      ▲                                  │  ▲                               (approve | reject)
-      │                                  │  └── claim again by A: same answer, nothing changes
-      │                                  └───── claim or reply by B: 409
+                 claim (operator A, lease 15 min)             reply (operator A)
+   pending ─────────────────────────────────────▶ claimed ─────────────────────────▶ resolved
+      ▲  ▲                                          │  │  ▲                         (approve | reject)
+      │  │   lease runs out (nobody has to act)     │  │  └── claim again by A: lease renewed
+      │  └──────────────────────────────────────────┘  │      claim or reply by B: 409
+      │            reject {close: false} by A          │
+      └────────────────────────────────────────────────┤
+                                  reject {close: true} └──────────────────────────▶ resolved (no message)
    created by the handoff node (reason, summary, whole record)
 ```
 
-Every arrow is one SQL statement, `UPDATE ... WHERE status = <expected>` (plus `AND claimed_by = <me>` for the reply), and the rows it changed are counted. 1 means this caller won; 0 means somebody else got there first, and a read says whether it is a `409` or a `404`. That statement is what makes it exactly-once, not a lock in Python: two operators, two threads or two processes can race and SQLite lets one through (the tests race separate connections to the same file). `operator_messages.handoff_id` is also `UNIQUE`, so a handoff cannot deliver two messages even if the code were wrong.
+Every arrow is one SQL statement, `UPDATE ... WHERE status = <expected>` (plus `AND claimed_by = <me>` for the operator's own moves), and the rows it changed are counted. 1 means this caller won; 0 means somebody else got there first, and a read says whether it is a `409` or a `404`. That statement is what makes it exactly-once, not a lock in Python: two operators, two threads or two processes can race and SQLite lets one through (the tests race separate connections to the same file). `operator_messages.handoff_id` is also `UNIQUE`, so a handoff cannot deliver two messages even if the code were wrong.
 
 **Roles.** The JWT has a `role` claim: `merchant` or `operator`. A token without it is a merchant, an unknown value is `401`, so nothing becomes an operator by accident.
 
@@ -140,27 +143,56 @@ python -m scripts.issue_token --role operator --operator ops1       # prints the
 
 | Endpoint | What it does |
 |---|---|
-| `GET /operator/handoffs?status=pending&limit=100` | The queue, **oldest first**. `status` is `pending`, `claimed` or `resolved` (none = all), `limit` 1-500. One row per handoff: `id`, `merchant_id`, `conversation_id`, `reason`, `priority`, `summary`, `status`, `claimed_by`, `claimed_at`, `resolution`, `resolved_at`, `created_at`. |
+| `GET /operator/handoffs?status=pending&limit=100` | The queue, **oldest first**. `status` is `pending`, `claimed` or `resolved` (none = all), `limit` 1-500. One row per handoff: `id`, `merchant_id`, `conversation_id`, `reason`, `priority`, `summary`, `status`, `claimed_by`, `claimed_at`, `lease_expires_at`, `resolution`, `resolved_at`, `created_at`. |
 | `GET /operator/handoffs/{id}` | One handoff with the whole case (`record`: recent conversation, what the agents found, tool calls) and `operator_reply`. |
-| `POST /operator/handoffs/{id}/claim` | `pending` to `claimed`. `409` if another operator holds it or it is resolved. Claiming what you already hold is `200` with the same result. |
-| `POST /operator/handoffs/{id}/reply` | Body `{"decision": "approve" or "reject", "message": "...", "idempotency_key": "..."}`. `claimed` to `resolved`, only by the operator who claimed it. `409` if nobody claimed it, someone else did, or it is already resolved. Returns the handoff plus `replayed`. |
+| `POST /operator/handoffs/{id}/claim` | `pending` to `claimed`, with a lease. `409` if another operator holds a valid claim or it is resolved. Claiming what you already hold is `200` and **renews the lease** (`claimed_at` stays). |
+| `POST /operator/handoffs/{id}/reply` | Body `{"decision": "approve" or "reject", "message": "...", "idempotency_key": "..."}`. `claimed` to `resolved`, only by the operator who holds a valid claim. `409` if nobody claimed it, someone else did, the lease ran out, or it is already resolved. Returns the handoff plus `replayed`. |
+| `POST /operator/handoffs/{id}/reject` | Body `{"reason": "...", "close": false}`. The operator who holds a valid claim gives the case up. `close: false` (default): back to `pending` for any operator. `close: true`: resolved as `reject` **with no message for the customer** (spam, duplicates). `reason` (1-500 characters) is stored in the audit trail for the other operators and is never shown to the customer. `409` without a valid claim or if resolved. Not to be confused with `reply` + `decision: "reject"`, which answers the customer with a refusal. |
 
 `message` is 1-1000 characters, trimmed, with no control characters (`422` otherwise). `idempotency_key` is 8-64 characters of `[A-Za-z0-9_.-]`, one per attempt, chosen by the client (a uuid works).
+
+**Leases.** A claim holds for `HANDOFF_LEASE_MINUTES` (default 15). After that the handoff is `pending` again: the next list, read, claim or reply (by anybody, or the customer asking for the status) notices and puts it back, records `lease_expired` with the operator who lost it, and another operator can take it. There is no background job to run. The operator who lost the lease can no longer reply (`409`, claim again first); a claim made before the end renews it, so a long case needs a claim call now and then. The clock is injectable in the store, so the tests move time instead of sleeping.
 
 **Idempotency of the reply.** Repeating the same `idempotency_key` with the same decision and message returns the same result (`replayed: true`, same `resolved_at`) and stores nothing again, so retrying after a timeout is safe. The same key with another decision or message is `409`. Another key on a handoff that is already resolved is `409`. The key is checked together with the operator: it does not let a second operator in.
 
 **What the customer gets.**
 
-- The operator's message is saved in SQLite, tied to the conversation, **not** in the graph state or the checkpointer, so it survives any change of how conversations are stored.
-- It is delivered in the `operator_messages` field of the **next `/chat` response of that conversation**, once (it is marked delivered in the same transaction, so two simultaneous turns cannot both get it). `GET /conversations/{conversation_id}/operator-messages` lists all of them, delivered or not, without sending a turn. Each has `handoff_id`, `decision`, `message`, `created_at` and `sender: "human_operator"` so a client can label it.
-- It is **not** added to the conversation history the agents read. The LLM sees exactly what it saw before this feature, so no prompt or routing changed. The cost: if the customer's next question depends on what the operator said, the agents do not know it.
-- The handoff status is visible in `/chat`: `handoff.status` for the case opened in this turn, and `open_handoffs` (`[{"id", "status"}]`) for earlier cases of the conversation that are still `pending` or `claimed`. Nothing says who the operator is.
+- The operator's message is saved in SQLite, tied to the conversation, in the queue file and not in the checkpointer. It is delivered in the `operator_messages` field of the **next `/chat` response of that conversation**, once (it is marked delivered in the same transaction, so two simultaneous turns cannot both get it; if the turn then fails it is given back). `GET /conversations/{conversation_id}/operator-messages` lists all of them, delivered or not, without sending a turn. Each has `handoff_id`, `decision`, `message`, `created_at` and `sender: "human_operator"` so a client can label it.
+- **The agents read it too.** On that same turn it is added to the conversation just before the customer's message, as an assistant-side message `[Operador humano] (approve) <text>` (or `(reject)`). It is an ordinary message in the thread, so `recent_dialogue`, the rolling summary and the next handoff record carry it with no change to any prompt, node or the router, and it ages out of the window like any other message. When there is no operator reply the input of every agent is identical to what it was before (a test compares the Router input with and without the queue). Because the label is what tells a model "this is a human, not you and not the customer", a customer who types `[Operador humano]` in their own message gets it turned into `[cita: Operador humano]` before it reaches the graph (nothing else in a message is ever changed). The customer also sees it in `GET /conversations/{id}` as an assistant message.
+- The handoff status is visible in `/chat`: `handoff.status` for the case opened in this turn, and `open_handoffs` (`[{"id", "status"}]`) for earlier cases of the conversation that are still `pending` or `claimed`. `GET /conversations/{id}` has `pending_human` (`true` while a case of that conversation is pending or claimed). Nothing says who the operator is, and a claim that expired shows as `pending`.
 
-**Security.** A merchant only gets data of their own conversations: every merchant-side query filters by the token's `sub`, and somebody else's conversation or handoff answers like a missing one (`404`). Operators see every merchant's handoffs; that is their job. Each action (create, claim, reply) is appended to the `handoff_events` table with the operator id and a timestamp, and logged; refused attempts and replays are not recorded as actions. If the queue breaks, the customer's `/chat` turn still works (the message just stays undelivered).
+**Security.** A merchant only gets data of their own conversations: every merchant-side query filters by the token's `sub`, and somebody else's conversation or handoff answers like a missing one (`404`). Operators see every merchant's handoffs; that is their job. Each action (create, claim, reply, release, close, lease expiry) is appended to the `handoff_events` table with the operator id and a timestamp, and logged; refused attempts, renewals and replays are not recorded as actions. If the queue breaks, the customer's `/chat` turn still works (the message just stays undelivered).
 
-**Storage and migration.** The queue is its own SQLite file, `HANDOFFS_DB_PATH` (default `data/handoffs.sqlite`, in the `data` volume), apart from the conversation checkpoints: the conversation retention purge never deletes it. `data/handoffs.jsonl` is still written for every new handoff as an **audit copy**. At startup the API imports that file into the queue: every record whose id is not there yet comes in as `pending`, the rest are skipped, so restarting changes nothing and a handoff somebody already answered is never reopened. A line that is not valid JSON or lacks `handoff_id`, `user_id` or `reason` is logged and skipped. Records from before this feature have no `conversation_id` and land in `default`. **Check that file before the first start:** the eval writes to it too (cases `h01`-`h03`), so test handoffs will show up in the operator queue.
+**Privacy of the queue.**
 
-**What this does not do yet.** There is no operator UI (operators use the API), no notification when a handoff appears (a Slack/Teams `HandoffNotifier` is the place), no claim timeout (a handoff claimed by an operator who disappears stays claimed), no way to hand a claimed case to another operator, and no retention of `handoffs.sqlite`/`handoffs.jsonl` (they hold the recent conversation, in clear, and `DELETE /conversations/{id}` does not touch them).
+- `DELETE /conversations/{id}` also erases that conversation's handoffs, their operator messages and their audit events (matched by the token's user and the conversation id), with `secure_delete` on, and truncates the WAL. A test searches a token in the raw bytes of `handoffs.sqlite` and its `-wal` before and after. A case that was in progress disappears from the operators' queue too (`404`): deleting your conversation wins over a case that is still open. If the erase fails the call is a `500` (the thread may already be gone) and repeating it finishes the job.
+- `THREAD_TTL_DAYS` also applies to handoffs: one whose last activity (created, claimed or resolved, the latest) is older than that is erased in any status, with its messages and events, by the same startup and periodic purge. A case nobody answered in that time is logged as such. It is a separate clock from the conversation's: an active conversation does not keep an old handoff alive.
+- **The JSONL file keeps no excerpt.** `data/handoffs.jsonl` is an audit trail, and a copy of the case in it could not be erased by either of the above, so new lines carry only `handoff_id`, `created_at`, `user_id`, `conversation_id`, `reason`, `priority`, `ticket_id`, `language`, the tool names (`agent:tool`, no arguments) and `"redacted": true`: no message, no dialogue, no agent findings, no summary. The importer skips redacted lines. The case itself lives only in `handoffs.sqlite`. What the customer said can still be in `tickets.jsonl` (the ticket description holds the first 200 characters) and in backups; those are not covered. `FileQueueNotifier` (whole record) still exists for someone who wants that file.
+
+**Storage and the old queue file.** The queue is its own SQLite file, `HANDOFFS_DB_PATH` (default `data/handoffs.sqlite`, in the `data` volume), apart from the conversation checkpoints, so changing how conversations are stored never touches it.
+
+Importing the old JSONL is **off** by default (`HANDOFF_IMPORT_JSONL=false`). Files written before this version hold whole conversation excerpts, and the eval writes its cases to the same file, so loading it blindly would put test cases and old customer text in front of operators. When it is off and the file has unimported records, startup logs a warning with the count. To import it once:
+
+```bash
+# 1. back it up (the copy has the excerpts: keep it out of git and OneDrive, delete it when done)
+cp data/handoffs.jsonl "data/handoffs.jsonl.bak-$(date +%F)"
+#    in Docker:
+docker compose cp api:/app/data/handoffs.jsonl "./handoffs-backup-$(date +%F).jsonl"
+
+# 2. look at what is there and keep only real cases (here: drop the demo customers the eval uses)
+python -c "import json,collections; print(collections.Counter(json.loads(l)['user_id'] for l in open('data/handoffs.jsonl')))"
+grep -v -E '"user_id": "cliente(1988|2024|3030)"' data/handoffs.jsonl > data/handoffs.clean && mv data/handoffs.clean data/handoffs.jsonl
+#    or start empty:   : > data/handoffs.jsonl
+#    in Docker, edit a copy and put it back: docker compose cp ./handoffs.clean api:/app/data/handoffs.jsonl
+
+# 3. turn it on in .env, restart, and look at the log line "handoff import ... {'imported': N, ...}"
+HANDOFF_IMPORT_JSONL=true
+# 4. set it back to false (leaving it on is harmless, records already in the queue are skipped)
+```
+
+Every record that is not in the queue yet comes in as `pending` with its old date, the rest are skipped, so a restart changes nothing and a handoff somebody already answered is never reopened. A line that is not valid JSON or lacks `handoff_id`, `user_id` or `reason` is logged and skipped. Records from before this feature have no `conversation_id` and land in `default`. **A record older than `THREAD_TTL_DAYS` is imported and then erased by the purge that runs at the same startup**; set `THREAD_TTL_DAYS=0` for that one start if you want to see it. The eval keeps writing only to the JSONL (a redacted line), never to the queue.
+
+**What this does not do yet.** There is no operator UI (operators use the API), no notification when a handoff appears (a Slack/Teams `HandoffNotifier` is the place), no way to hand a claimed case straight to a named operator (release it and let them claim it), and `handoffs.sqlite` is not encrypted.
 
 ## Design notes
 
@@ -174,7 +206,7 @@ python -m scripts.issue_token --role operator --operator ops1       # prints the
 ## Tests and evaluation
 
 ```bash
-pytest -q                            # 329 tests, no network or keys needed (also: pytest -m "not eval")
+pytest -q                            # 399 tests, no network or keys needed (also: pytest -m "not eval")
 docker compose run --rm eval         # full evaluation (needs keys + KB)
 python -m eval.run_eval --only q05   # just some cases
 ```
@@ -262,12 +294,12 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
   |---|---|
   | `GET /conversations` | `{"conversations": [{"conversation_id", "created_at", "last_active", "turns"}], "count", "limit"}`, most recent first, only yours. **No content.** `limit` is `MAX_THREADS_PER_USER` (null = none). Times are ISO 8601 UTC. |
   | `GET /conversations/{id}` | The same metadata plus `messages` (`[{"role": "user" or "assistant", "content"}]`, no tool output) and `summary` (text, or null). It is what the thread still holds: after a rolling summary, only the recent window plus the summary. |
-  | `DELETE /conversations/{id}` | `204`, no body. The thread is gone from the checkpoints and the registry, and its slot against the limit is free again (you can reuse the id for a new, empty conversation). Not undoable. |
+  | `DELETE /conversations/{id}` | `204`, no body. The thread is gone from the checkpoints and the registry, its handoffs (with their operator messages and audit events) are erased from the handoff queue, and its slot against the limit is free again (you can reuse the id for a new, empty conversation). Not undoable. |
 
-  A conversation that is somebody else's, one that does not exist and an id with a bad character or length all get the same `404 {"detail": "Conversation not found."}`, so the API never says whether a conversation exists. Without a token it is `401`, with a token without the `chat` scope `403`, as in `/chat`. `DELETE` does **not** touch what a handoff already copied: `handoffs.sqlite`, `handoffs.jsonl` and the tickets keep their own excerpt of the conversation (and an operator reply to a deleted conversation is no longer readable through `/conversations/{id}/operator-messages`, which is then a `404`). A `DELETE` while a turn of that same conversation is still running can leave that turn's checkpoints behind as orphans; the purge removes them (when `THREAD_TTL_DAYS` is not 0).
+  A conversation that is somebody else's, one that does not exist and an id with a bad character or length all get the same `404 {"detail": "Conversation not found."}`, so the API never says whether a conversation exists. Without a token it is `401`, with a token without the `chat` scope `403`, as in `/chat`. `DELETE` erases the conversation's handoffs too (see "Human oversight", privacy), but **not** the tickets, which keep the first 200 characters of the request, and not backups. A `DELETE` while a turn of that same conversation is still running can leave that turn's checkpoints behind as orphans; the purge removes them (when `THREAD_TTL_DAYS` is not 0).
 - **Rolling summary.** Above `SUMMARY_THRESHOLD` messages (default 12), the messages older than the last `HISTORY_WINDOW` (6) are folded into a `summary` with `LIGHT_MODEL` (never the Support model) and removed. Router and agents get the summary (as a system message) plus the recent window; with no summary their input is exactly what it was. If the summary call fails or exceeds `SUMMARY_TIMEOUT_SECONDS` (20, no retries), the turn goes on without it, a warning is logged and the next turn tries again. After every turn only the latest checkpoint of the thread is kept: LangGraph writes several per turn and `SqliteSaver.prune` is not implemented in the pinned version, so `Memory.prune_thread` does it in SQL. Without that, the table would grow with every turn and the removed messages would stay readable in old rows.
-- **Personal data at rest.** The checkpoints store the whole graph state: the conversation, the summary, `agent_outputs` and the raw results of the tools (profile, transactions, payouts). That is customer data in `checkpoints.sqlite`, in the Docker volume, in its `-wal` file and in every backup. **Nothing is encrypted**: protect the volume and the backups at the host level (disk encryption, access control). The same applies to `handoffs.jsonl` (it carries the last messages of the conversation) and `tickets.jsonl`, which neither the retention below nor `DELETE /conversations/{id}` covers.
-- **Retention.** `THREAD_TTL_DAYS` (default 30, 0 = never) counts days **without activity**. Idle threads are deleted by `thread_id` (checkpoints, writes and registry row) when the API starts and every `PURGE_INTERVAL_MINUTES` (60). Checkpoints without a registry row (an interrupted purge) are deleted too. Deleted rows are zeroed (`secure_delete` is on) and the write-ahead log is truncated after a `DELETE` or a purge, so the text is gone from the file and its `-wal`; tests search the raw bytes for it. **Backups keep what was purged or deleted**, and so does the host's own snapshotting: delete old backups on the same schedule.
+- **Personal data at rest.** The checkpoints store the whole graph state: the conversation, the summary, `agent_outputs` and the raw results of the tools (profile, transactions, payouts). That is customer data in `checkpoints.sqlite`, in the Docker volume, in its `-wal` file and in every backup. **Nothing is encrypted**: protect the volume and the backups at the host level (disk encryption, access control). `handoffs.sqlite` holds the same kind of data (the recent conversation of every handoff, in clear) and is erased by `DELETE /conversations/{id}` and by the same TTL. `tickets.jsonl` is covered by neither (and a `handoffs.jsonl` written before the audit copy was redacted still has excerpts: see "Human oversight" before importing it).
+- **Retention.** `THREAD_TTL_DAYS` (default 30, 0 = never) counts days **without activity**. Idle threads are deleted by `thread_id` (checkpoints, writes and registry row) when the API starts and every `PURGE_INTERVAL_MINUTES` (60). Checkpoints without a registry row (an interrupted purge) are deleted too. Handoffs idle for the same time are erased by the same pass (see "Human oversight"). Deleted rows are zeroed (`secure_delete` is on) and the write-ahead log is truncated after a `DELETE` or a purge, so the text is gone from the file and its `-wal`; tests search the raw bytes for it. **Backups keep what was purged or deleted**, and so does the host's own snapshotting: delete old backups on the same schedule.
 - **Limit per customer.** `MAX_THREADS_PER_USER` (default 20, 0 = no limit). A new conversation above it gets `429` with a message saying so; existing conversations keep working and **nothing is deleted to make room**: free a slot with `DELETE /conversations/{id}` or wait for the TTL. The check and the insert are atomic, and a failed first turn gives its slot back.
 - **Backup.** Same commands as above (`tar` through a throwaway container). Stop the API first: it flushes the WAL on shutdown, so the `.sqlite` file is then complete. Copying the file while the API runs can miss what is still in the `-wal` file.
 - **Tuning.** All of this is read from the environment (`.env.example` lists the variables). A shorter window or summary threshold costs fewer tokens per turn but forgets sooner.
@@ -276,7 +308,7 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
 
 - Conversation memory persists (SQLite in the `data` volume) but there is **no encryption at rest**, and it assumes one uvicorn worker. See "Conversation memory".
 - Customer data is fake.
-- The handoff queue has an API (see "Human oversight") but no operator UI, no notification when a case arrives and no claim timeout, so "a human will follow up" is only as true as somebody polling `/operator/handoffs`. A real setup needs Slack/Teams/helpdesk behind `HandoffNotifier`. The path from a real agent's handoff to the queue is tested with stub agents, not yet with the real LLM (`docs/VERIFICATION_DEBT.md`, item 11).
+- The handoff queue has an API (see "Human oversight") but no operator UI, no notification when a case arrives, so "a human will follow up" is only as true as somebody polling `/operator/handoffs`. A real setup needs Slack/Teams/helpdesk behind `HandoffNotifier`. The path from a real agent's handoff to the queue, and what the real LLM does with an operator's reply in its context, are tested with stub agents and a recording fake LLM, not yet with the real one (`docs/VERIFICATION_DEBT.md`, items 11 and 12).
 - Whether an agent escalates is the LLM's call, so it can miss sometimes.
 - With `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). `SUPPORT_MODEL=openai/gpt-oss-120b` (the delivered setting) avoids it in the runs we have, at the cost of 120b quota, but it is not yet confirmed with a full eval.
 - `qwen/qwen3.8-27b` works as the judge but not as an agent: it fails with "Request too large ... output tokens per minute" because the agents do not set `max_tokens`.

@@ -39,9 +39,17 @@ HTTP service that answers Getnet customer messages by orchestrating specialised 
 | F28 | `GET /operator/handoffs?status=` lists oldest first; `claim` is pending to claimed, idempotent for the same operator, 409 for another one or a resolved handoff; unknown id is 404 | `tests/test_operator_api.py`, `tests/test_handoff_store.py` |
 | F29 | Transitions are atomic (`UPDATE ... WHERE status = ...` and rows counted): simultaneous claims have exactly one winner, through threads, separate connections and the API | `test_two_simultaneous_claims_...`, `test_many_operators_claiming_at_once_exactly_one_wins` |
 | F30 | `reply` (approve or reject, message up to 1000 characters, `idempotency_key`) is allowed only to the operator who claimed it; the same key repeats the result without a second message; another key on a resolved handoff, an unclaimed one or one held by another operator is 409 | `test_reply_...` in `tests/test_operator_api.py`, `tests/test_handoff_store.py` |
-| F31 | The operator message is stored in SQLite and delivered once in `operator_messages` of the next `/chat` of that conversation (and readable at `GET /conversations/{id}/operator-messages`); it is not added to the graph history | `test_full_flow_...`, `test_the_operator_message_never_enters_what_the_graph_sees` |
+| F31 | The operator message is stored in SQLite and delivered once in `operator_messages` of the next `/chat` of that conversation (and readable at `GET /conversations/{id}/operator-messages`); it is given back if that turn fails | `test_full_flow_...`, `test_a_failed_turn_gives_the_message_back_...` |
 | F32 | `/chat` shows `handoff.status` and the conversation's `open_handoffs`, never the operator's identity; a merchant only sees and receives their own conversations' data | `test_merchant_b_does_not_see_or_receive_...`, `test_a_merchant_response_never_carries_operator_identity_...` |
-| F33 | Every operator action (create, claim, reply) is stored in `handoff_events` with operator id and timestamp; refused attempts and replays are not recorded as actions | `test_every_operator_action_is_recorded_...` |
+| F33 | Every operator action (create, claim, reply, release, close, lease expiry) is stored in `handoff_events` with operator id and timestamp; refused attempts, renewals and replays are not recorded as actions | `test_every_operator_action_is_recorded_...`, `test_release_and_close_are_audited_...`, `test_expiry_is_recorded_...` |
+| F34 | `DELETE /conversations/{id}` also erases that conversation's handoffs, operator messages and events (matched by the token's user), with `secure_delete` and a truncated WAL; an erase failure is a 500, never a 204 with a copy left | `tests/test_handoff_privacy.py` (`test_deleting_a_conversation_erases_...` searches a token in `handoffs.sqlite` and its `-wal`) |
+| F35 | The JSONL audit file carries no conversation excerpt (no message, dialogue, findings, summary or tool arguments); the importer skips those lines | `test_the_audit_file_has_no_conversation_text_...`, `test_tool_arguments_do_not_reach_the_audit_file` |
+| F36 | Handoffs expire with `THREAD_TTL_DAYS` (last activity, any status), with their messages and events, at startup and every purge interval | `test_idle_handoffs_expire_...`, `test_the_lifespan_purges_expired_handoffs_at_startup` |
+| F37 | A claim holds for `HANDOFF_LEASE_MINUTES` (default 15, renewable by claiming again); an expired claim is pending again when anyone lists, reads, claims or replies; the former holder can not reply | `tests/test_handoff_lease.py` (injected clock) |
+| F38 | `POST /operator/handoffs/{id}/reject {reason, close}` needs a valid claim: `close: false` releases to pending, `close: true` resolves as reject with no customer message; reason is audited and never shown to the customer; invalid transitions are 409 | `tests/test_handoff_release.py` |
+| F39 | The operator reply enters the agents' context as an assistant-side `[Operador humano] (decision) text` message, once, through `recent_dialogue`; with no reply the agents' input is identical to before; a customer typing the label gets it turned into a quote | `tests/test_handoff_resume.py` |
+| F40 | `GET /conversations/{id}` reports `pending_human` (a handoff of the conversation is pending or claimed) | `test_pending_human_...` in `tests/test_operator_api.py` |
+| F41 | The old JSONL queue is imported at startup only with `HANDOFF_IMPORT_JSONL=true` (default false); when off and the file has unimported records, the log says how many | `test_the_old_file_is_not_imported_by_default_...`, `test_with_the_flag_on_...` |
 
 ## 3. Non-functional requirements
 
@@ -77,7 +85,7 @@ Routing rules:
 Synthesizer: 0 outputs -> direct reply; 1 -> passthrough; 2+ -> merge; all failed -> static fallback.
 
 ## 5. Out of scope (for now)
-Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider (RS256/JWKS, refresh, revocation), rate limiting, real customer backend, an operator UI, a real notifier (Slack/Teams/helpdesk) for the handoff queue, a claim timeout or reassignment, and retention of `handoffs.sqlite` / `handoffs.jsonl`.
+Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider (RS256/JWKS, refresh, revocation), rate limiting, real customer backend, an operator UI, a real notifier (Slack/Teams/helpdesk) for the handoff queue, reassigning a claimed case to a named operator, and encryption of `handoffs.sqlite`.
 
 ## 6. Open decisions (resolved with the product owner)
 - Routing style: multi-step plan (chosen) vs single-agent vs supervisor loop.
@@ -87,6 +95,8 @@ Guardrail classifiers, tracing backend, dashboards/alerts, an identity provider 
 - Identity: JWT HS256 with a shared secret for the demo (chosen); the id comes only from `sub`. Body `user_id` kept optional for compatibility with the original contract.
 - Evaluation: offline dataset + LLM judge (chosen).
 - Handoff action: ticket + SQLite operator queue behind a pluggable notifier (chosen); operators work through `/operator/*` (claim, reply approve or reject), and the answer is delivered in the customer's next `/chat` turn. No webhook yet. See README, "Human oversight".
-- Operator reply delivery: stored in SQLite and returned as `operator_messages`, **not** injected into the graph history, so what the LLM sees does not change (chosen). The agents therefore do not know what the operator said.
+- Operator reply delivery: stored in SQLite, returned as `operator_messages` on the customer's next turn, and added to the agents' context on that turn as an assistant-side message labelled `[Operador humano] (approve|reject) <text>`, through the ordinary message history (chosen, replaces the earlier decision to keep it out of the graph). No prompt, node or router changed; with no reply the input is identical to before. The label is the trust marker, so a customer's own `[Operador humano]` is turned into a quote. The behavior of the real LLM with that message (and `x04`) is not yet confirmed (`docs/VERIFICATION_DEBT.md`, item 12).
+- Claims: a lease (`HANDOFF_LEASE_MINUTES`, 15) instead of a permanent claim, swept lazily on access, no background job (chosen). `reject` releases (default) or closes without a customer message.
+- Privacy of handoffs: erased with their conversation and by the same TTL; the JSONL audit file is redacted (chosen over keeping excerpts there). Importing the old file is opt-in (`HANDOFF_IMPORT_JSONL`).
 - Roles: a `role` claim (`merchant` default, `operator`) on top of the scopes; each endpoint family needs its own role (chosen).
 - Handoff triggers: explicit user request, technical failure, agent-reported low confidence (chosen); user frustration detection left out as too subjective to evaluate.
