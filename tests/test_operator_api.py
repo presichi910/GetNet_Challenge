@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import get_settings
 from app.graph import build_graph
-from app.handoff import FanOutNotifier, FileQueueNotifier, make_handoff_node
+from app.handoff import AuditNotifier, FanOutNotifier, make_handoff_node
 from app.handoff_store import HandoffStore
 from app.main import app
 from app.memory import Memory
@@ -34,7 +34,7 @@ def build_service(repo, mem, store, audit):
         answer = "seen=" + "|".join(m.content for m in state["messages"] if isinstance(m, HumanMessage))
         return {"final_answer": answer, "messages": [AIMessage(content=answer)]}
 
-    node = make_handoff_node(repo=repo, notifier=FanOutNotifier(store, FileQueueNotifier(audit)))
+    node = make_handoff_node(repo=repo, notifier=FanOutNotifier(store, AuditNotifier(audit)))
     graph = build_graph(router, lambda s: {}, lambda s: {}, synthesizer, node, checkpointer=mem.saver)
     return ChatService(graph, memory=mem, handoffs=store)
 

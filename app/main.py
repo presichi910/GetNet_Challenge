@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     purge_task = None
     if getattr(app.state, "service", None) is None:  # tests set their own service
         from app.graph import build_default_graph
-        from app.handoff import FanOutNotifier, FileQueueNotifier
+        from app.handoff import AuditNotifier, FanOutNotifier
         from app.memory import open_memory
         from app.rag.store import collection_size
 
@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
             handoffs.import_jsonl(s.handoffs_file)
         except Exception:  # noqa: BLE001 - an import problem must not stop the API
             log.exception("Handoff import from %s failed", s.handoffs_file)
-        notifier = FanOutNotifier(handoffs, FileQueueNotifier(s.handoffs_file))
+        notifier = FanOutNotifier(handoffs, AuditNotifier(s.handoffs_file))
         app.state.service = ChatService(build_default_graph(checkpointer=memory.saver, handoff_notifier=notifier),
                                         memory=memory, handoffs=handoffs)
         log.info("Conversation memory: %s (ttl %s days, max %s threads per user)", memory.path,

@@ -18,7 +18,8 @@ queue. The customer's message lives here too, so it survives any change of check
 Everything an operator does is appended to `handoff_events` with the operator id and a timestamp.
 
 Customer data at rest: `record` is the whole handoff record (the recent conversation, what the
-agents found, the tool calls), the same content the JSONL audit file has. See README, "Human oversight".
+agents found, the tool calls). It lives only here, so deleting a conversation or the TTL purge can
+erase it: the JSONL audit file gets a redacted copy (no excerpt). See README, "Human oversight".
 """
 from __future__ import annotations
 
@@ -179,7 +180,7 @@ class HandoffStore:
         keeps its state. Everything in that file was waiting, so everything comes in as pending.
         A line that is not a usable record is counted and skipped, never fatal."""
         path = Path(path)
-        result = {"imported": 0, "already_there": 0, "invalid": 0}
+        result = {"imported": 0, "already_there": 0, "invalid": 0, "redacted": 0}
         if not path.exists():
             return result
         with path.open(encoding="utf-8") as f:
@@ -188,6 +189,9 @@ class HandoffStore:
             for n, line in enumerate(lines, 1):
                 try:
                     rec = json.loads(line)
+                    if isinstance(rec, dict) and rec.get("redacted"):
+                        result["redacted"] += 1  # an audit line, written without the case: nothing to work on
+                        continue
                     if not all(isinstance(rec.get(k), str) and rec[k] for k in ("handoff_id", "user_id", "reason")):
                         raise ValueError("missing handoff_id, user_id or reason")
                     if c.execute("SELECT 1 FROM handoffs WHERE id = ?", (rec["handoff_id"],)).fetchone():

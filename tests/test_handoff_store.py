@@ -238,8 +238,8 @@ def test_import_loads_every_record_once_and_a_second_run_adds_nothing(store, tmp
     old = record("HND-OLD001", created_at="2025-12-01T08:00:00+00:00", agent_findings={"knowledge": "some finding"})
     del old["conversation_id"]  # the old format had no conversation_id
     write_jsonl(src, record("HND-OLD002", user="cliente2024"), old)  # file order is not age order
-    assert store.import_jsonl(src) == {"imported": 2, "already_there": 0, "invalid": 0}
-    assert store.import_jsonl(src) == {"imported": 0, "already_there": 2, "invalid": 0}
+    assert store.import_jsonl(src) == {"imported": 2, "already_there": 0, "invalid": 0, "redacted": 0}
+    assert store.import_jsonl(src) == {"imported": 0, "already_there": 2, "invalid": 0, "redacted": 0}
     assert [h["id"] for h in store.list_queue()] == ["HND-OLD001", "HND-OLD002"]  # by the age in the record
     h = store.get("HND-OLD001")
     assert h["status"] == "pending" and h["conversation_id"] == "default"  # the default conversation
@@ -260,8 +260,8 @@ def test_import_never_resets_a_handoff_somebody_already_worked_on(store, tmp_pat
 def test_import_skips_bad_lines_and_a_missing_file_is_not_an_error(store, tmp_path):
     src = tmp_path / "handoffs.jsonl"
     write_jsonl(src, record("HND-OLD001"), extra=["{not json", '{"handoff_id": "HND-X"}', "[1, 2]", "", '"text"'])
-    assert store.import_jsonl(src) == {"imported": 1, "already_there": 0, "invalid": 4}
-    assert store.import_jsonl(tmp_path / "nope.jsonl") == {"imported": 0, "already_there": 0, "invalid": 0}
+    assert store.import_jsonl(src) == {"imported": 1, "already_there": 0, "invalid": 4, "redacted": 0}
+    assert store.import_jsonl(tmp_path / "nope.jsonl") == {"imported": 0, "already_there": 0, "invalid": 0, "redacted": 0}
 
 
 def test_import_keeps_a_record_whose_created_at_is_not_a_date(store, tmp_path):

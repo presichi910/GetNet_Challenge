@@ -59,7 +59,7 @@ def build_graph(router: Callable, knowledge: Callable, support: Callable, synthe
 def build_default_graph(checkpointer=None, handoff_notifier=None):
     """`checkpointer=None` keeps the memory in process (the eval does that, so it never writes
     conversations to disk). The API passes the persistent one, see `app.main.lifespan`.
-    `handoff_notifier=None` only appends to the JSONL file; the API passes one that also queues the
+    `handoff_notifier=None` only appends a redacted audit line to the JSONL file; the API passes one that also queues the
     handoff in the SQLite store the operators work from."""
     from app.agents.knowledge import make_knowledge_node
     from app.agents.router import make_router_node

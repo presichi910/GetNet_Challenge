@@ -11,8 +11,8 @@ about the same (0.41-0.67 vs 0.37-0.50).
 
 On handoff we open a ticket (if the customer exists), queue a record and tell the user in their
 language. `HandoffNotifier` is where Slack/Teams would plug in. The API queues into the SQLite
-`HandoffStore` (what operators claim and answer, see app.handoff_store) AND appends to the JSONL
-file, which stays as an audit copy. The node itself does not know which: it gets one notifier.
+`HandoffStore` (what operators claim and answer, see app.handoff_store) AND appends a redacted
+record (no conversation excerpt) to the JSONL file, which stays as an audit trail. The node itself does not know which: it gets one notifier.
 """
 from __future__ import annotations
 
@@ -98,6 +98,28 @@ class FileQueueNotifier:
                     record["handoff_id"], record["reason"], record["priority"], record["user_id"], record["ticket_id"])
 
 
+AUDIT_FIELDS = ("handoff_id", "created_at", "user_id", "conversation_id", "reason", "priority", "ticket_id", "language")
+
+
+def audit_record(record: dict) -> dict:
+    """The record without what the customer said: no user message, no conversation, no agent findings,
+    no summary, no tool arguments. Only who, which conversation, why, when, and which tools ran.
+    Deleting a conversation erases its handoffs from the queue; this keeps the audit copy from
+    being a second place where its text survives."""
+    out = {k: record.get(k) for k in AUDIT_FIELDS}
+    out["tools"] = [f"{tc.get('agent')}:{tc.get('name')}" for tc in record.get("tool_calls", [])]
+    out["redacted"] = True  # the importer skips these: there is nothing in them to work on
+    return out
+
+
+class AuditNotifier(FileQueueNotifier):
+    """Appends the REDACTED record (see `audit_record`) to the JSONL file. Same file and logging as
+    FileQueueNotifier, which keeps writing the whole record for anyone who wants that."""
+
+    def notify(self, record: dict) -> None:
+        super().notify(audit_record(record))
+
+
 class FanOutNotifier:
     """Send each record to several notifiers. Every one is tried even if another fails, and the
     first failure is raised at the end (the node logs it, the customer still gets a reply)."""
@@ -126,7 +148,7 @@ def compose_notice(reason: str, language: str, ref: str) -> str:
 def make_handoff_node(repo: CustomerRepository | None = None, notifier: HandoffNotifier | None = None):
     s = get_settings()
     repository = repo or CustomerRepository(tickets_file=s.tickets_file)
-    queue = notifier or FileQueueNotifier(s.handoffs_file)
+    queue = notifier or AuditNotifier(s.handoffs_file)
 
     def handoff_node(state: dict) -> dict:
         reason = handoff_reason(state) or "agent_unresolved"

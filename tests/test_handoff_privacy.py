@@ -77,3 +77,50 @@ def test_a_failure_while_erasing_is_a_500_not_a_204_with_a_copy_left_behind(clie
 
     with TestClient(app, raise_server_exceptions=False) as c:
         assert c.delete("/conversations/c1", headers=m(A)).status_code == 500
+
+
+# ---------------- the JSONL audit copy keeps no excerpt ----------------
+
+def test_the_audit_file_has_no_conversation_text_but_keeps_who_when_and_why(client, store, audit):
+    hid = open_case(client, A, "c1", f"I need a human, my secret is {TOKEN}")
+    text = audit.read_text(encoding="utf-8")
+    assert TOKEN not in text and "conversation" not in text.replace("conversation_id", "")
+    rec = __import__("json").loads(text.strip())
+    assert (rec["handoff_id"], rec["user_id"], rec["conversation_id"], rec["reason"], rec["redacted"]) == (
+        hid, A, "c1", "user_requested", True)
+    assert set(rec) == {"handoff_id", "created_at", "user_id", "conversation_id", "reason", "priority", "ticket_id",
+                        "language", "tools", "redacted"}
+    assert TOKEN.encode() in raw_bytes(store)  # the case itself is only in the queue, where it can be erased
+
+
+def test_tool_arguments_do_not_reach_the_audit_file():
+    from app.handoff import audit_record
+
+    rec = audit_record({"handoff_id": "HND-1", "user_id": "u", "reason": "agent_unresolved", "user_message": "secret",
+                        "tool_calls": [{"agent": "support", "name": "escalate_to_human", "args": {"reason": "secret"}}]})
+    assert rec["tools"] == ["support:escalate_to_human"] and "secret" not in str(rec)
+
+
+def test_the_default_notifier_of_the_node_is_the_redacted_one(repo, tmp_path, monkeypatch):
+    from langchain_core.messages import HumanMessage
+
+    from app.config import get_settings
+    from app.handoff import make_handoff_node
+
+    monkeypatch.setenv("HANDOFFS_FILE", str(tmp_path / "audit.jsonl"))
+    get_settings.cache_clear()
+    try:
+        make_handoff_node(repo=repo)({"messages": [HumanMessage(content=f"human, {TOKEN}")], "user_id": A,
+                                      "language": "English", "plan": [], "agent_outputs": {}, "wants_human": True})
+    finally:
+        get_settings.cache_clear()
+    assert TOKEN not in (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
+
+
+def test_the_importer_skips_audit_lines_it_wrote_itself(store, audit):
+    from app.handoff import AuditNotifier
+
+    AuditNotifier(audit).notify({"handoff_id": "HND-AAAAAA", "created_at": "2026-01-01T00:00:00+00:00", "user_id": A,
+                                 "reason": "user_requested", "user_message": "x"})
+    assert store.import_jsonl(audit) == {"imported": 0, "already_there": 0, "invalid": 0, "redacted": 1}
+    assert store.list_queue() == []
