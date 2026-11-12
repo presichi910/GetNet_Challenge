@@ -1,41 +1,45 @@
 # Evaluation report
 
-_Generated 20261109-105753_
+_Generated 20261112-092550_
+
+_Models: knowledge = `openai/gpt-oss-120b`, router / synthesizer = `openai/gpt-oss-20b`, support = `openai/gpt-oss-120b`, judge = `qwen/qwen3.8-27b`_
 
 ## Summary
 
 _Judge scores are shown as a percentage of the maximum (5)._
 
+- **provider_errors**: 0
 - **routing_accuracy**: 100%
 - **tool_use_accuracy**: 100%
 - **degraded_rate**: 0%
-- **latency_ms_p50**: 6841
-- **latency_ms_p95**: 18425
+- **latency_ms_p50**: 4234
+- **latency_ms_p95**: 8579
+- **handoff_accuracy**: 100%
+- **handoff_rate**: 24%
 - **avg_relevance**: 100%
-- **avg_groundedness**: 94%
-- **avg_completeness**: 91%
+- **avg_groundedness**: 93%
+- **avg_completeness**: 94%
 - **avg_tone**: 100%
-- **judge_pass_rate**: 93%
+- **judge_pass_rate**: 100%
 
 ## Cases
 
 | id | route | tools | handoff | rel | grounded | compl | tone | verdict | ms |
 |---|---|---|---|---|---|---|---|---|---|
-| q01_compare_plans | OK ['knowledge'] | OK | -  | 100% | 40% | 80% | 100% | fail | 21369 |
-| q02_weather | OK ['knowledge'] | OK | -  | 100% | 80% | 80% | 100% | pass | 6773 |
-| q03_payout_timing | OK ['support'] | OK | -  | 100% | 100% | 100% | 100% | pass | 5497 |
-| q04_pix_bank_account | OK ['knowledge'] | OK | -  | 100% | 100% | 80% | 100% | pass | 6068 |
-| q05_terminal_offline | OK ['support', 'knowledge'] | OK | -  | 100% | 100% | 80% | 100% | pass | 11412 |
-| q06_receivables_advance | OK ['knowledge'] | OK | -  | 100% | 100% | 100% | 100% | pass | 7605 |
-| q07_fx_euro | OK ['knowledge'] | OK | -  | 100% | 100% | 80% | 100% | pass | 8843 |
-| q08_decline_error | OK ['support', 'knowledge'] | OK | -  | 100% | 100% | 100% | 100% | pass | 18425 |
-| q09_installments | OK ['knowledge'] | OK | -  | 100% | 100% | 100% | 100% | pass | 16353 |
-| q10_payment_link_whatsapp | OK ['knowledge'] | OK | -  | 100% | 100% | 100% | 100% | pass | 12066 |
-| x01_portuguese | OK ['support'] | OK | -  | 100% | 100% | 100% | 100% | pass | 6091 |
-| x02_greeting | OK [] | OK | -  | 100% | 100% | 100% | 100% | pass | 2559 |
-| x03_unknown_customer | OK ['support'] | OK | -  | 100% | 100% | 80% | 100% | pass | 6841 |
-| x04_cross_customer_attempt | OK ['support'] | OK | -  | 100% | 100% | 100% | 100% | pass | 5436 |
-
-## Judge failures
-
-- **q01_compare_plans**: The answer contains significant factual errors regarding the target audience (swapping Clássica and Smart descriptions) and the specific revenue thresholds for fee waivers (citing R$60k for Smart instead of the R$40k/80k tiers found in the official site evidence).
+| q01_compare_plans | OK ['knowledge'] | OK | OK  | 100% | 80% | 100% | 100% | pass | 8579 |
+| q02_weather | OK ['knowledge'] | OK | OK  | 100% | 80% | 80% | 100% | pass | 8445 |
+| q03_payout_timing | OK ['support'] | OK | OK  | 100% | 100% | 100% | 100% | pass | 4011 |
+| q04_pix_bank_account | OK ['knowledge'] | OK | OK  | 100% | 80% | 80% | 100% | pass | 4234 |
+| q05_terminal_offline | OK ['support', 'knowledge'] | OK | OK  | 100% | 80% | 80% | 100% | pass | 36765 |
+| q06_receivables_advance | OK ['knowledge'] | OK | OK  | 100% | 80% | 100% | 100% | pass | 5002 |
+| q07_fx_euro | OK ['knowledge'] | OK | OK  | 100% | 80% | 100% | 100% | pass | 6483 |
+| q08_decline_error | OK ['support', 'knowledge'] | OK | OK  | 100% | 100% | 100% | 100% | pass | 8487 |
+| q09_installments | OK ['knowledge'] | OK | OK  | 100% | 100% | 80% | 100% | pass | 3105 |
+| q10_payment_link_whatsapp | OK ['knowledge'] | OK | OK  | 100% | 100% | 100% | 100% | pass | 6048 |
+| x01_portuguese | OK ['support'] | OK | OK  | 100% | 100% | 100% | 100% | pass | 2778 |
+| x02_greeting | OK [] | OK | OK  | 100% | 100% | 100% | 100% | pass | 3270 |
+| x03_unknown_customer | OK ['support'] | OK | - agent_unresolved | 100% | 100% | 80% | 100% | pass | 2307 |
+| x04_cross_customer_attempt | OK ['support'] | OK | OK  | 100% | 100% | 100% | 100% | pass | 4440 |
+| h01_human_request | OK [] | OK | OK user_requested | 100% | 100% | 100% | 100% | pass | 1377 |
+| h02_human_request_pt | OK [] | OK | OK user_requested | 100% | 100% | 100% | 100% | pass | 1333 |
+| h03_unanswerable | OK ['support'] | OK | OK agent_unresolved | 100% | 100% | 100% | 100% | pass | 2084 |
