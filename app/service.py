@@ -70,9 +70,15 @@ class ChatService:
         return {**self._info(meta), "summary": values.get("summary") or None, "messages": messages}
 
     def delete_conversation(self, user_id: str, conversation_id: str) -> bool:
-        if not self.memory:
-            return False
-        return self.memory.delete_thread_for(user_id, thread_id_for(user_id, conversation_id))
+        """Erase the conversation AND the handoffs of that conversation (cases, operator messages and
+        their audit events), so deleting a conversation leaves no copy of it in the human queue.
+        True if anything of the caller's went; the handoffs are matched by the token's user_id. An
+        erase error propagates (500) rather than saying 204 with a copy left behind."""
+        deleted = bool(self.memory) and self.memory.delete_thread_for(user_id, thread_id_for(user_id, conversation_id))
+        # not caught: if the erase fails the client gets a 500 and retries, and the retry finds the
+        # leftover handoffs (the conversation itself is already gone) and finishes the job
+        erased = self.handoffs.delete_conversation(user_id, conversation_id) if self.handoffs else 0
+        return deleted or erased > 0
 
     def operator_messages(self, user_id: str, conversation_id: str) -> list[dict] | None:
         """Every operator message of the caller's own conversation, or None if the conversation is not

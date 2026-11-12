@@ -126,6 +126,9 @@ class HandoffStore:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
+        # deleted rows are overwritten with zeros, not just unlinked: without this the text of a
+        # deleted or purged case stays readable in the file's free pages
+        self.conn.execute("PRAGMA secure_delete=ON")
         self._lock = threading.Lock()
         with self._lock:
             self.conn.executescript(SCHEMA)
@@ -321,6 +324,40 @@ class HandoffStore:
         """Did this merchant ever hand off a case in this conversation?"""
         return bool(self._read("SELECT 1 FROM handoffs WHERE merchant_id = ? AND conversation_id = ? LIMIT 1",
                                (merchant_id, conversation_id)))
+
+    # ---- erasing (privacy) ---------------------------------------------------------------------
+
+    def _scrub(self) -> None:
+        """Fold the WAL into the main file and empty it: the pages it holds are older copies of what
+        was just deleted. (With secure_delete the main file has zeros where the text was.)"""
+        with self._lock:
+            try:
+                self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except sqlite3.Error:
+                log.warning("WAL checkpoint failed after a delete", exc_info=True)
+
+    @staticmethod
+    def _erase(conn, ids: list[str]) -> None:
+        """Delete these handoffs and everything that hangs from them. Children first (foreign key)."""
+        for i in range(0, len(ids), 500):  # stay under SQLite's variable limit
+            chunk = ids[i:i + 500]
+            marks = ",".join("?" * len(chunk))
+            conn.execute(f"DELETE FROM operator_messages WHERE handoff_id IN ({marks})", chunk)
+            conn.execute(f"DELETE FROM handoff_events WHERE handoff_id IN ({marks})", chunk)
+            conn.execute(f"DELETE FROM handoffs WHERE id IN ({marks})", chunk)
+
+    def delete_conversation(self, merchant_id: str, conversation_id: str) -> int:
+        """Erase every handoff of this merchant's conversation, with its operator messages and its
+        audit events, then zero the freed pages and truncate the WAL. Filtered by merchant_id, so a
+        conversation_id that is somebody else's matches nothing. Returns how many handoffs went."""
+        with self._tx() as c:
+            ids = [r["id"] for r in c.execute("SELECT id FROM handoffs WHERE merchant_id = ? AND conversation_id = ?",
+                                              (merchant_id, conversation_id))]
+            self._erase(c, ids)
+        if ids:
+            self._scrub()
+            log.info("handoffs erased with their conversation: user=%s conv=%s count=%d", merchant_id, conversation_id, len(ids))
+        return len(ids)
 
     # ---- lifecycle -------------------------------------------------------------------------------
 
