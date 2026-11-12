@@ -469,3 +469,49 @@ def test_an_expired_claim_is_pending_again_in_the_api_and_another_operator_can_t
     assert chat(client, A, "status?", "c1")["open_handoffs"] == [{"id": hid, "status": "pending"}]
     assert reply(client, hid, OP1).status_code == 409  # OP1 lost it
     assert claim(client, hid, OP2).status_code == 200
+
+
+# ---------------- pending_human ----------------
+
+def pending(client, user=A, conv="c1"):
+    r = client.get(f"/conversations/{conv}", headers=m(user))
+    assert r.status_code == 200, r.text
+    return r.json()["pending_human"]
+
+
+def test_pending_human_follows_the_life_of_the_handoff(client):
+    chat(client, A, "hello", "c1")
+    assert pending(client) is False  # no handoff at all
+    hid = open_case(client, A, "c1")
+    assert pending(client) is True  # pending
+    claim(client, hid)
+    assert pending(client) is True  # claimed
+    client.post(f"/operator/handoffs/{hid}/reject", headers=op(), json={"reason": "not mine"})
+    assert pending(client) is True  # released: back to pending
+    claim(client, hid)
+    reply(client, hid)
+    assert pending(client) is False  # resolved
+    hid2 = open_case(client, A, "c1")
+    claim(client, hid2)
+    client.post(f"/operator/handoffs/{hid2}/reject", headers=op(), json={"reason": "spam", "close": True})
+    assert pending(client) is False  # closed
+
+
+def test_pending_human_is_per_conversation_and_per_merchant(client):
+    open_case(client, A, "c1")
+    chat(client, A, "hello", "c2")
+    chat(client, B, "hello", "c1")
+    assert (pending(client, A, "c1"), pending(client, A, "c2"), pending(client, B, "c1")) == (True, False, False)
+
+
+def test_pending_human_is_true_again_when_a_claim_expires(client, store):
+    open_case(client, A, "c1")
+    claim(client, store.list_queue()[0]["id"])
+    store._clock = lambda: __import__("time").time() + 3600
+    assert pending(client) is True
+
+
+def test_pending_human_is_false_when_there_is_no_queue(client):
+    chat(client, A, "hello", "c1")
+    app.state.service.handoffs = None
+    assert pending(client) is False

@@ -133,6 +133,8 @@ class ConversationDetail(ConversationInfo):
     # What the thread still holds: the recent window, plus a summary of what was folded away
     summary: str | None = None
     messages: list[HistoryMessage]
+    # True while a case of this conversation is with the humans (pending or claimed): an answer is on its way
+    pending_human: bool = False
 
 
 class StoredOperatorMessage(OperatorMessage):

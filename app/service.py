@@ -70,7 +70,9 @@ class ChatService:
         values = self.graph.get_state({"configurable": {"thread_id": thread_id}}).values
         messages = [{"role": "user" if isinstance(m, HumanMessage) else "assistant", "content": str(m.content)}
                     for m in values.get("messages", []) if isinstance(m, (HumanMessage, AIMessage)) and m.content]
-        return {**self._info(meta), "summary": values.get("summary") or None, "messages": messages}
+        pending_human = bool(self.handoffs and self.handoffs.open_for_conversation(user_id, conversation_id, limit=1))
+        return {**self._info(meta), "summary": values.get("summary") or None, "messages": messages,
+                "pending_human": pending_human}
 
     def delete_conversation(self, user_id: str, conversation_id: str) -> bool:
         """Erase the conversation AND the handoffs of that conversation (cases, operator messages and
