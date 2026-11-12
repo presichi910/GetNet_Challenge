@@ -28,7 +28,8 @@ RUN mkdir -p /app/data /app/eval/reports \
 ENV CHROMA_DIR=/app/data/chroma \
     RAW_DIR=/app/data/raw \
     TICKETS_FILE=/app/data/tickets.jsonl \
-    HANDOFFS_FILE=/app/data/handoffs.jsonl
+    HANDOFFS_FILE=/app/data/handoffs.jsonl \
+    CHECKPOINT_DB_PATH=/app/data/checkpoints.sqlite
 
 USER app
 

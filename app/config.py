@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     tickets_file: str = "./data/tickets.jsonl"
     handoffs_file: str = "./data/handoffs.jsonl"  # what a human operator would read
 
+    # conversation memory: LangGraph checkpoints in one SQLite file (inside the data volume in Docker)
+    checkpoint_db_path: str = "./data/checkpoints.sqlite"
+
     # how many past messages the agents see
     history_window: int = 6
 

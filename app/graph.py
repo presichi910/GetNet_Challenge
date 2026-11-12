@@ -50,7 +50,9 @@ def build_graph(router: Callable, knowledge: Callable, support: Callable, synthe
     return g.compile(checkpointer=checkpointer or MemorySaver())
 
 
-def build_default_graph():
+def build_default_graph(checkpointer=None):
+    """`checkpointer=None` keeps the memory in process (the eval does that, so it never writes
+    conversations to disk). The API passes the persistent one, see `app.main.lifespan`."""
     from app.agents.knowledge import make_knowledge_node
     from app.agents.router import make_router_node
     from app.agents.support import make_support_node
@@ -61,4 +63,4 @@ def build_default_graph():
 
     repo = CustomerRepository(tickets_file=get_settings().tickets_file)  # shared, so handoff tickets show up for Support
     return build_graph(make_router_node(), make_knowledge_node(), make_support_node(repo=repo),
-                       make_synthesizer_node(), make_handoff_node(repo=repo))
+                       make_synthesizer_node(), make_handoff_node(repo=repo), checkpointer=checkpointer)

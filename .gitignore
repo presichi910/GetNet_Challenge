@@ -9,6 +9,7 @@ data/chroma/
 data/raw/
 data/tickets.jsonl
 data/handoffs.jsonl
+data/checkpoints.sqlite*
 
 # Evaluation reports: keep only the ones that the README cites as evidence
 eval/reports/*

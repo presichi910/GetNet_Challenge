@@ -22,18 +22,26 @@ async def lifespan(app: FastAPI):
     logging.basicConfig(level=get_settings().log_level,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     validate_jwt_secret(get_settings().jwt_secret)  # fail fast: never serve with a weak secret
+    memory = None
     if getattr(app.state, "service", None) is None:  # tests set their own service
         from app.graph import build_default_graph
+        from app.memory import open_memory
         from app.rag.store import collection_size
 
-        app.state.service = ChatService(build_default_graph())
+        memory = open_memory(get_settings().checkpoint_db_path)
+        app.state.service = ChatService(build_default_graph(checkpointer=memory.saver))
+        log.info("Conversation memory: %s", memory.path)
         n = collection_size()
         if n == 0:
             log.warning("Knowledge base is EMPTY. Run `python -m app.rag.ingest` "
                         "(docker: `docker compose run --rm ingest`).")
         else:
             log.info("Knowledge base ready: %d chunks", n)
-    yield
+    try:
+        yield
+    finally:
+        if memory is not None:
+            memory.close()  # flush the WAL, release the file
 
 
 app = FastAPI(title="Getnet Multi-Agent Support", version="1.1.0", lifespan=lifespan)
