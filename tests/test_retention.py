@@ -280,8 +280,12 @@ def test_the_periodic_task_purges_while_the_api_runs(auth_env, monkeypatch, db):
         with TestClient(app):
             mem = opened[0]
             talk(mem, A, "late", "expires while running", now=time.time() - 40 * DAY)
-            deadline = time.time() + 5
-            while time.time() < deadline and mem.owner_of(f"{A}:late") is not None:
+            # The seed is already expired while the task runs every ~30 ms, so a pass can land between
+            # the registry insert and the checkpoint writes. The next pass removes those as orphans:
+            # wait for the end state, not for the first pass.
+            deadline = time.time() + 10
+            while time.time() < deadline and (mem.owner_of(f"{A}:late") is not None
+                                              or rows(mem, "checkpoints", f"{A}:late") > 0):
                 time.sleep(0.05)
             assert mem.owner_of(f"{A}:late") is None
             assert rows(mem, "checkpoints", f"{A}:late") == 0
