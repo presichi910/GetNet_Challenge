@@ -6,8 +6,7 @@ import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.llm import get_llm
-from app.config import get_settings
+from app.llm import get_judge_llm
 from app.prompts import JUDGE_PROMPT
 
 SCORE_KEYS = ("relevance", "groundedness", "completeness", "tone")
@@ -27,7 +26,7 @@ def parse_judgement(text: str) -> dict:
 
 class Judge:
     def __init__(self, llm=None):
-        self.llm = llm or get_llm(temperature=0.0, model=get_settings().judge_model, max_tokens=500)
+        self.llm = llm or get_judge_llm(temperature=0.0, max_tokens=500)  # always Groq, whatever AGENT_PROVIDER
 
     def score(self, question: str, answer: str, evidence: list[str], criteria: str = "") -> dict:
         ev = "\n\n".join(evidence) if evidence else "(no evidence: the assistant used no tools)"

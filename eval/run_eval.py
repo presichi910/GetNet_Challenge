@@ -58,7 +58,7 @@ def handoff_ok(case: dict, reason: str | None) -> bool | None:
 PROVIDER_ERROR_RE = re.compile(
     r"RateLimitError|APIConnectionError|APITimeoutError|InternalServerError|ServiceUnavailable|"
     r"ConnectError|ReadTimeout|Error code: (?:429|5\d\d)\b|rate limit|tokens per (?:day|minute)|"
-    r"quota|overloaded|connection (?:error|reset|refused)", re.I)
+    r"quota|overloaded|connection (?:error|reset|refused)|ModelNotFound|Model not found", re.I)
 
 
 def is_provider_error(text: str | None) -> bool:
@@ -240,8 +240,8 @@ def current_models() -> dict:
     from app.config import get_settings
 
     s = get_settings()
-    return {"knowledge": s.llm_model, "router / synthesizer": s.light_model, "support": s.effective_support_model,
-            "judge": s.judge_model}
+    return {"agent provider": s.agent_provider, "knowledge": s.llm_model, "router / synthesizer": s.light_model,
+            "support": s.effective_support_model, "judge": f"{s.judge_model} (groq)"}
 
 
 def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | None = None) -> str:

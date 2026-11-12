@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     # keys
     groq_api_key: str = ""
+    fireworks_api_key: str = ""
     tavily_api_key: str = ""
     voyage_api_key: str = ""
 
@@ -21,6 +22,8 @@ class Settings(BaseSettings):
     jwt_audience: str = "getnet-support-api"
 
     # models
+    # provider of the agents: groq (default) or fireworks (OpenAI-compatible API). The judge is always Groq.
+    agent_provider: str = "groq"
     llm_model: str = "openai/gpt-oss-120b"
     # smaller model for router and synthesizer (Groq limits are per model)
     light_model: str = "openai/gpt-oss-20b"

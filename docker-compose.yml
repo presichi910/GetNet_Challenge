@@ -1,6 +1,7 @@
 # One model per role. Values come from the shell or .env, these are the defaults.
 # Override for a single run: LIGHT_MODEL=openai/gpt-oss-120b docker compose run --rm eval
 x-models: &models
+  AGENT_PROVIDER: ${AGENT_PROVIDER:-groq}           # groq or fireworks (agents only; the judge is always Groq)
   LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-120b}      # knowledge agent
   LIGHT_MODEL: ${LIGHT_MODEL:-openai/gpt-oss-20b}   # router, synthesizer (and support if SUPPORT_MODEL is empty)
   SUPPORT_MODEL: ${SUPPORT_MODEL:-}                 # support agent, empty = same as LIGHT_MODEL

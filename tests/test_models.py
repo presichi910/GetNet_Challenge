@@ -89,13 +89,15 @@ def test_the_eval_report_lists_the_support_model_apart(models):
     from eval.run_eval import current_models
 
     models(SUPPORT_MODEL="m-support")
-    assert current_models() == {"knowledge": "m-knowledge", "router / synthesizer": "m-light",
-                                "support": "m-support", "judge": "m-judge"}
+    got = current_models()
+    assert got.pop("agent provider") in ("groq", "fireworks")
+    assert got == {"knowledge": "m-knowledge", "router / synthesizer": "m-light",
+                   "support": "m-support", "judge": "m-judge (groq)"}
 
 
 # ---- the files that configure the containers must not drift from the settings ----
 
-MODEL_VARS = ("LLM_MODEL", "LIGHT_MODEL", "SUPPORT_MODEL", "JUDGE_MODEL")
+MODEL_VARS = ("AGENT_PROVIDER", "LLM_MODEL", "LIGHT_MODEL", "SUPPORT_MODEL", "JUDGE_MODEL")
 
 
 def test_every_model_variable_is_in_docker_compose_and_env_example():
