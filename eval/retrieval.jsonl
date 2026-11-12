@@ -1,0 +1,21 @@
+{"id": "r01_pix_enable_app", "question": "How do I enable receiving sales via Pix in the Getnet app?", "expected_urls": ["https://site.getnet.com.br/get-ajuda-pix/como-habilitar-o-recebimento-de-vendas-via-pix-no-aplicativo-getnet-brasil"]}
+{"id": "r02_get_tap", "question": "What is Get Tap and how does it work?", "expected_urls": ["https://site.getnet.com.br/get-tap"]}
+{"id": "r03_advance_in_app", "question": "How can I anticipate my card sales through the Getnet app?", "expected_urls": ["https://site.getnet.com.br/get-ajuda-antecipacao-de-venda/como-antecipar-sua-vendas-pelo-app", "https://site.getnet.com.br/get-ajuda-antecipacao-de-venda"]}
+{"id": "r04_terminal_errors", "holdout": true, "question": "What do the error messages on my Getnet card machine mean?", "expected_urls": ["https://site.getnet.com.br/get-ajuda-erros-maquininha"]}
+{"id": "r05_get_conta_access", "question": "How do I log in to my Get Conta?", "expected_urls": ["https://site.getnet.com.br/get-ajuda-get-conta/como-acesso-a-minha-get-conta"]}
+{"id": "r06_get_smart_help", "question": "How do I solve problems with my Get Smart terminal?", "expected_urls": ["https://site.getnet.com.br/get-ajuda-maquininha/solucoes-get-smart"]}
+{"id": "r07_payment_link", "question": "How does the Getnet payment link work?", "expected_urls": ["https://site.getnet.com.br/link-de-pagamento", "https://site.getnet.com.br/link-de-pagamento-getnet", "https://site.getnet.com.br/link-de-pagamento-vendas", "https://site.getnet.com.br/link-de-pagamento-alternativa-segura"]}
+{"id": "r08_whatsapp", "question": "Can I take payments through WhatsApp with Getnet?", "expected_urls": ["https://site.getnet.com.br/pagamentos-pelo-whatsapp"]}
+{"id": "r09_crediario", "question": "What is the Getnet crediario and how many installments does it allow?", "expected_urls": ["https://site.getnet.com.br/crediario"]}
+{"id": "r10_all_machines", "question": "Which card machines does Getnet sell?", "expected_urls": ["https://site.getnet.com.br/todas-as-maquininhas"]}
+{"id": "r11_digital_account", "holdout": true, "question": "What is the Getnet digital account and what can I do with it?", "expected_urls": ["https://site.getnet.com.br/conta-digital"]}
+{"id": "r12_custom_rates", "question": "Can I get personalized rates from Getnet?", "expected_urls": ["https://site.getnet.com.br/taxas-personalizadas-eye"]}
+{"id": "r13_online_payments", "question": "What online payment solutions does Getnet offer for e-commerce?", "expected_urls": ["https://www.getnet.net/en/our-solutions/online-payments"]}
+{"id": "r14_agentic_commerce", "question": "What is agentic commerce and how does Getnet support AI agents paying?", "expected_urls": ["https://www.getnet.net/en/our-solutions/agentic-commerce", "https://www.getnet.net/en/resources/blog/agentic-payments"]}
+{"id": "r15_nayax_partner", "holdout": true, "question": "Does Getnet partner with Nayax for unattended payments?", "expected_urls": ["https://www.getnet.net/en/partners/nayax"]}
+{"id": "r16_in_person", "question": "What in-person payment solutions does Getnet provide to businesses?", "expected_urls": ["https://www.getnet.net/en/our-solutions/in-person-payments"]}
+{"id": "r17_omnichannel", "question": "What does Getnet offer for omnichannel payments?", "expected_urls": ["https://www.getnet.net/en/our-solutions/omnichannel"]}
+{"id": "r18_portugal_pay", "holdout": true, "question": "How do people prefer to pay in Portugal?", "expected_urls": ["https://www.getnet.net/en/resources/blog/how-people-prefer-to-pay-in-portugal"]}
+{"id": "r19_contact", "question": "How can I contact Getnet?", "expected_urls": ["https://www.getnet.net/en/contact", "https://www.getnet.net/uy/contacto"]}
+{"id": "r20_pix_overview", "holdout": true, "question": "What is Pix and how does Getnet handle Pix sales?", "expected_urls": ["https://site.getnet.com.br/pix"]}
+{"id": "r21_uy_installments", "holdout": true, "question": "Can I sell in installments with Getnet in Uruguay?", "expected_urls": ["https://www.getnet.net/uy/vende-en-cuotas"]}

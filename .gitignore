@@ -18,6 +18,7 @@ eval/reports/*
 !eval/reports/MARKER-DESIGN-*.md
 !eval/reports/BASELINE-*.md
 !eval/reports/REPEATS-*.md
+!eval/reports/RETRIEVAL-*.md
 
 # Personal how-to, not part of the deliverable
 docs/GITHUB_GUIDE.md
