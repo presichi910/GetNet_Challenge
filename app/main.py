@@ -23,6 +23,18 @@ from app.service import ChatService
 log = logging.getLogger("api")
 
 
+def _warn_if_unimported(path: str) -> None:
+    """HANDOFF_IMPORT_JSONL is off: say so once if the old file holds records that were never imported."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            n = sum(1 for line in f if line.strip() and '"redacted"' not in line)
+    except OSError:
+        return
+    if n:
+        log.warning("%s has %d handoff records that are NOT in the operator queue (HANDOFF_IMPORT_JSONL is off). "
+                    "Back it up and clean it, then set HANDOFF_IMPORT_JSONL=true to import it once.", path, n)
+
+
 def _purge_once(memory: Memory, handoffs: HandoffStore | None) -> None:
     """One retention pass: idle threads, then idle handoffs (same THREAD_TTL_DAYS). One failing does
     not skip the other."""
@@ -63,10 +75,13 @@ async def lifespan(app: FastAPI):
         # the human queue: its own SQLite file. The JSONL stays as an audit copy, and what an older
         # version left in it is imported (once: running it again adds nothing)
         handoffs = HandoffStore(s.handoffs_db_path, lease_seconds=s.handoff_lease_minutes * 60)
-        try:
-            handoffs.import_jsonl(s.handoffs_file)
-        except Exception:  # noqa: BLE001 - an import problem must not stop the API
-            log.exception("Handoff import from %s failed", s.handoffs_file)
+        if s.handoff_import_jsonl:
+            try:
+                handoffs.import_jsonl(s.handoffs_file)
+            except Exception:  # noqa: BLE001 - an import problem must not stop the API
+                log.exception("Handoff import from %s failed", s.handoffs_file)
+        else:
+            _warn_if_unimported(s.handoffs_file)
         notifier = FanOutNotifier(handoffs, AuditNotifier(s.handoffs_file))
         app.state.service = ChatService(build_default_graph(checkpointer=memory.saver, handoff_notifier=notifier),
                                         memory=memory, handoffs=handoffs)

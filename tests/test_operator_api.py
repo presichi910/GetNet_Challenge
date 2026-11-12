@@ -414,6 +414,7 @@ def test_startup_imports_the_old_queue_once_and_a_restart_does_not_duplicate(aut
     monkeypatch.setenv("CHECKPOINT_DB_PATH", str(tmp_path / "checkpoints.sqlite"))
     monkeypatch.setenv("HANDOFFS_DB_PATH", str(tmp_path / "handoffs.sqlite"))
     monkeypatch.setenv("HANDOFFS_FILE", str(old))
+    monkeypatch.setenv("HANDOFF_IMPORT_JSONL", "true")
     monkeypatch.setenv("THREAD_TTL_DAYS", "0")  # these records are from January: with a TTL the purge would erase them at once
     monkeypatch.setattr("app.graph.build_default_graph", lambda checkpointer=None, **_: build_graph(
         lambda s: {}, lambda s: {}, lambda s: {}, lambda s: {}, lambda s: {}, checkpointer=checkpointer))
@@ -436,6 +437,7 @@ def test_a_handoff_worked_on_survives_a_restart_and_is_not_reimported_as_pending
     monkeypatch.setenv("CHECKPOINT_DB_PATH", str(tmp_path / "checkpoints.sqlite"))
     monkeypatch.setenv("HANDOFFS_DB_PATH", str(tmp_path / "handoffs.sqlite"))
     monkeypatch.setenv("HANDOFFS_FILE", str(old))
+    monkeypatch.setenv("HANDOFF_IMPORT_JSONL", "true")
     monkeypatch.setenv("THREAD_TTL_DAYS", "0")  # these records are from January: with a TTL the purge would erase them at once
     monkeypatch.setattr("app.graph.build_default_graph", lambda checkpointer=None, **_: build_graph(
         lambda s: {}, lambda s: {}, lambda s: {}, lambda s: {}, lambda s: {}, checkpointer=checkpointer))

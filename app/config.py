@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # the handoff queue the operators work through (claim / reply). Its own file: it does not depend on the
     # conversation checkpointer, and the conversation retention purge never touches it
     handoffs_db_path: str = "./data/handoffs.sqlite"
+    # load the old queue file (HANDOFFS_FILE) into the queue at startup. Off by default: that file may hold
+    # test cases (the eval writes to it) and, if it is from before the audit file was redacted, whole
+    # conversation excerpts. Back it up and clean it first (README, "Human oversight"), then turn this on
+    handoff_import_jsonl: bool = False
     # how long an operator's claim holds. After that the handoff is pending again, so one who claimed
     # and went away does not keep a customer waiting. Claiming again (same operator) renews it
     handoff_lease_minutes: float = 15.0

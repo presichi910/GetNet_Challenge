@@ -200,3 +200,77 @@ def test_the_lifespan_purges_expired_handoffs_at_startup(auth_env, monkeypatch, 
             assert [h["id"] for h in client.get("/operator/handoffs", headers=op()).json()["handoffs"]] == ["HND-NEW"]
     finally:
         app.state.service = None
+
+
+# ---------------- HANDOFF_IMPORT_JSONL ----------------
+
+def _start_api(monkeypatch, tmp_path, **env):
+    """Start the real lifespan on temp files, with a JSONL of three old cases."""
+    import json as _json
+
+    from fastapi.testclient import TestClient
+
+    from app.config import get_settings
+    from app.graph import build_graph
+    from app.main import app
+
+    old = tmp_path / "handoffs.jsonl"
+    old.write_text("\n".join(_json.dumps({"handoff_id": f"HND-OLD00{i}", "created_at": "2026-01-01T10:00:00+00:00",
+                                          "user_id": A, "reason": "user_requested", "user_message": f"old {i}"})
+                             for i in (1, 2, 3)) + "\n", encoding="utf-8")
+    monkeypatch.setenv("CHECKPOINT_DB_PATH", str(tmp_path / "checkpoints.sqlite"))
+    monkeypatch.setenv("HANDOFFS_DB_PATH", str(tmp_path / "handoffs.sqlite"))
+    monkeypatch.setenv("HANDOFFS_FILE", str(old))
+    monkeypatch.setenv("THREAD_TTL_DAYS", "0")
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr("app.graph.build_default_graph", lambda checkpointer=None, **_: build_graph(
+        lambda s: {}, lambda s: {}, lambda s: {}, lambda s: {}, lambda s: {}, checkpointer=checkpointer))
+    monkeypatch.setattr("app.rag.store.collection_size", lambda: 1)
+    get_settings.cache_clear()
+    app.state.service = None
+    return TestClient(app), old
+
+
+def test_the_old_file_is_not_imported_by_default_and_the_log_says_so(auth_env, monkeypatch, tmp_path, caplog):
+    client, old = _start_api(monkeypatch, tmp_path)
+    try:
+        with client as c:
+            assert c.get("/operator/handoffs", headers=op()).json()["count"] == 0
+    finally:
+        from app.main import app
+
+        app.state.service = None
+    assert "3 handoff records that are NOT in the operator queue" in caplog.text
+    assert "HANDOFF_IMPORT_JSONL" in caplog.text
+    assert old.read_text(encoding="utf-8").count("\n") == 3  # and the file itself is untouched
+
+
+@pytest.mark.parametrize("value", ["true", "1", "True"])
+def test_with_the_flag_on_it_imports_once_and_restarts_do_not_duplicate(auth_env, monkeypatch, tmp_path, value):
+    from app.main import app
+
+    client, _ = _start_api(monkeypatch, tmp_path, HANDOFF_IMPORT_JSONL=value)
+    try:
+        for _ in range(2):
+            app.state.service = None
+            with client as c:
+                assert c.get("/operator/handoffs", headers=op()).json()["count"] == 3
+    finally:
+        app.state.service = None
+
+
+def test_the_flag_defaults_to_off():
+    from app.config import Settings
+
+    assert Settings(_env_file=None).handoff_import_jsonl is False
+
+
+def test_no_warning_when_the_file_holds_only_audit_lines_or_does_not_exist(auth_env, monkeypatch, tmp_path, caplog):
+    from app.handoff import AuditNotifier
+    from app.main import _warn_if_unimported
+
+    _warn_if_unimported(str(tmp_path / "missing.jsonl"))
+    AuditNotifier(tmp_path / "audit.jsonl").notify({"handoff_id": "HND-1", "user_id": A, "reason": "user_requested"})
+    _warn_if_unimported(str(tmp_path / "audit.jsonl"))
+    assert "NOT in the operator queue" not in caplog.text
