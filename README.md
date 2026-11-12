@@ -121,7 +121,7 @@ A few things I learned while building it:
 ## Tests and evaluation
 
 ```bash
-pytest -q                            # 154 tests, no network or keys needed (also: pytest -m "not eval")
+pytest -q                            # 163 tests, no network or keys needed (also: pytest -m "not eval")
 docker compose run --rm eval         # full evaluation (needs keys + KB)
 python -m eval.run_eval --only q05   # just some cases
 ```
@@ -137,10 +137,11 @@ The evaluation has 17 cases (10 from the challenge + extras + 3 handoff cases). 
 | Variable | Role | Default |
 |---|---|---|
 | `LLM_MODEL` | Knowledge agent | `openai/gpt-oss-120b` |
-| `LIGHT_MODEL` | Router, Support, Synthesizer | `openai/gpt-oss-20b` |
+| `LIGHT_MODEL` | Router, Synthesizer | `openai/gpt-oss-20b` |
+| `SUPPORT_MODEL` | Support agent | empty = same as `LIGHT_MODEL` (`.env.example` sets `openai/gpt-oss-120b`) |
 | `JUDGE_MODEL` | Eval judge (a different model family) | `qwen/qwen3.8-27b` |
 
-They come from `.env`, `docker-compose.yml` passes them to the containers, and one run can override them: `LIGHT_MODEL=openai/gpt-oss-120b docker compose run --rm eval`. Groq's free tier limits tokens per model (gpt-oss: 8K per minute, 200K per day), so roles that share a model share one quota. That is why the light roles are on a different model than Knowledge.
+They come from `.env`, `docker-compose.yml` passes them to the containers, and one run can override them: `LIGHT_MODEL=openai/gpt-oss-120b docker compose run --rm eval`. Groq's free tier limits tokens per model (gpt-oss: 8K per minute, 200K per day), so roles that share a model share one quota. That is why the light roles are on a different model than Knowledge. Support is the exception: the 20b often skips `get_recent_transactions` on a decline (`q08`), so the delivered `.env.example` runs it on the 120b, which shares its quota with Knowledge.
 
 ### Latest full report
 
@@ -161,8 +162,10 @@ Nine Support/handoff cases (`q03 q05 q08 x01 x03 x04 h01 h02 h03`), one run each
 
 - `x04` (asking for another customer's data) is refused in both runs, and `h01`/`h02` always hand off.
 - `q08`: with `gpt-oss-20b` the Support agent calls only `get_terminal_status` and blames the Wi-Fi, although the data has two declined sales (codes 51 and 05) and the prompt says to always call `get_recent_transactions` for a decline. In the reports we have, Support on the 20b skipped that tool in 5 of 6 runs, and on the 120b it called it in 7 of 7 (six of those are from 11-08, before the light model existed, so only today's run is a controlled comparison). The judge passes the 20b answer because it never sees the transactions, so the tool check is the only signal.
+- `q05` failed groundedness on the 120b run (the answer added details like 2.4 GHz and a faulty module that the tools did not return). It is a single run: review with more data (`docs/VERIFICATION_DEBT.md`, item 6).
 - Tokens measured in the 120b run (8 cases plus part of `h03`): about 39.9K on `gpt-oss-120b` and 9.2K on the judge. The Knowledge cases cost 9-13K each, so I estimate the full 17 cases at around 120K tokens, which needs a fresh daily quota.
-- **Pending** (both gpt-oss models ran out of daily quota that day): the regression check of the authentication commit with the default models (only `q03` ran before the 20b quota ended), the same cases on the commit before it, `h03` on the 120b, and the full 17-case run.
+- **Pending** (both gpt-oss models ran out of daily quota that day): the regression check of the authentication commit with the default models (only `q03` ran before the 20b quota ended), the same cases on the commit before it, `h03` on the 120b, the full 17-case run, the Support route with tools inside the container, and confirming the `q08` fix below. The list, with commands and expected results, is in [docs/VERIFICATION_DEBT.md](docs/VERIFICATION_DEBT.md).
+- **`q08` fix: `SUPPORT_MODEL`.** Support runs on its own model variable, set to the 120b in `.env.example`. In the one controlled run it called `get_recent_transactions`; it has not been confirmed with a full eval yet. The eval now records the exact tool calls with their arguments (`tool_calls` in the JSON report).
 
 Handoff behavior: explicit requests for a human always escalated. The unanswerable loan question escalated most of the time but not always, since the agent decides whether to call `escalate_to_human` (see Limitations).
 
@@ -172,7 +175,7 @@ Handoff behavior: explicit requests for a human always escalated. The unanswerab
 - Customer data is fake.
 - Nothing reads the handoff queue. It's a file, so the "a human will follow up" message is not really backed by anyone yet. A real setup needs Slack/Teams/helpdesk behind `HandoffNotifier`.
 - Whether an agent escalates is the LLM's call, so it can miss sometimes.
-- With `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). Running Support on a bigger model fixes it in our runs, at the cost of 120b quota.
+- With `gpt-oss-20b` the Support agent often skips `get_recent_transactions` on a decline and blames the terminal (`q08`, see Re-evaluation). `SUPPORT_MODEL=openai/gpt-oss-120b` (the delivered setting) avoids it in the runs we have, at the cost of 120b quota, but it is not yet confirmed with a full eval.
 - `qwen/qwen3.8-27b` works as the judge but not as an agent: it fails with "Request too large ... output tokens per minute" because the agents do not set `max_tokens`.
 - The KB is only as good as the crawl. There's little troubleshooting content, so those answers are generic. Adding help-center URLs to `app/rag/sources.py` would help the most.
 - The LLM judge isn't ground truth, so spot-check the answers.
