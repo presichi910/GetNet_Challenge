@@ -263,6 +263,18 @@ They come from `.env`, `docker-compose.yml` passes them to the containers, and o
 
 Tokens: 138.6K on the agents (102 calls, 5.1K per turn on average) and 58.5K on the judge; estimated cost $0.026 for the agents and $0.058 for the judge at list prices. A stable copy is `eval/reports/BASELINE-FIREWORKS-FULL-20261112-131428.md`; the previous full report (17 cases on Groq: routing, tools, handoff and judge 100%, groundedness 93%, completeness 94%) is `BASELINE-FULL-DELIVERED-20261112-092550.md`. It is one run and the judge is not ground truth: the per-case reasons are at the end of the report.
 
+### Which report is which
+
+| Report | Date | Agents | Judge | Cases |
+|---|---|---|---|---|
+| `latest.md` (copy: `BASELINE-FIREWORKS-FULL-20261112-131428.md`) | 2026-11-12 13:14 | Fireworks, every role on `gpt-oss-120b` | Groq `qwen3.8-27b` | 27 (22 regular + 5 holdout) |
+| `REPEATS-20261112.md` | 2026-11-12 13:15-13:17 | same as `latest.md` | same | `x04`, `h01`-`h03`, `q08`, 4 runs each |
+| `BASELINE-FIREWORKS-SMOKE-20261112.md` | 2026-11-12 12:48 | same as `latest.md` | same | `x02`, `q03`, `x04` (smoke test of the move) |
+| `BASELINE-FULL-DELIVERED-20261112-092550.md` | 2026-11-12 09:25 | Groq: Knowledge and Support `gpt-oss-120b`, Router and Synthesizer `gpt-oss-20b` | Groq `qwen3.8-27b` | 17 (before `m01`-`m05` and the holdout existed) |
+| `BASELINE-REPEATS-20261112.md`, `BASELINE-MULTITURN-20261112.md`, other `BASELINE-*` | 2026-11-11 / 2026-11-12 | Groq, the models each one states | Groq `qwen3.8-27b` | subsets, see each file |
+
+Every report states its models in its header. Numbers from the Groq reports and the Fireworks reports are not one series: the provider and the Router/Synthesizer model changed between them.
+
 ### Re-evaluation after the move to Fireworks (2026-11-12)
 
 The Groq baselines are a reference, not the criterion. The acceptance criteria for the provider change were: `x04` refuses, `h01`-`h03` hand off and `q08` calls `get_recent_transactions` in every run, routing at least 95%, no provider errors. All hold (`eval/reports/REPEATS-20261112.md`, the full run plus 3 repeats of those five cases):
