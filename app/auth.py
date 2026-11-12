@@ -104,18 +104,6 @@ def get_principal(creds: HTTPAuthorizationCredentials | None = Depends(_bearer))
     return decode_token(creds.credentials)
 
 
-def require_scope(scope: str) -> Callable[[Principal], Principal]:
-    """Dependency: authenticated AND allowed to do `scope`."""
-
-    def dependency(principal: Principal = Depends(get_principal)) -> Principal:
-        if scope not in principal.scopes:
-            log.warning("auth forbidden: user=%s missing scope=%s", principal.user_id, scope)
-            raise HTTPException(status_code=403, detail=f"Missing required scope: {scope}.")
-        return principal
-
-    return dependency
-
-
 def _require_role_and_scope(role: str, scope: str) -> Callable[[Principal], Principal]:
     def dependency(principal: Principal = Depends(get_principal)) -> Principal:
         if principal.role != role:

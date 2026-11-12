@@ -202,7 +202,7 @@ def make_handoff_node(repo: CustomerRepository | None = None, notifier: HandoffN
         ref = f"{handoff_id} / {ticket_id}" if ticket_id else handoff_id
         notice = compose_notice(reason, state.get("language", "English"), ref)
         # the customer only sees the notice; what the agents found goes to the human in the record
-        # (an unresolved agent once passed off a generic contract clause as "your loan's rate")
+        # (an unresolved agent can pass off a generic contract clause as a specific answer)
         answer = notice
 
         info = {"id": handoff_id, "reason": reason, "priority": PRIORITY[reason], "ticket_id": ticket_id,

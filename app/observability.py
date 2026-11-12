@@ -26,7 +26,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 log = logging.getLogger("observability")
 
-# USD per 1M tokens (input, output). Serverless list prices read on PRICES_AS_OF from
+# USD per 1M tokens (input, output). Serverless list prices as of PRICES_AS_OF, from
 # https://docs.fireworks.ai/serverless/pricing and https://console.groq.com/docs/models.
 # Fireworks does not list gpt-oss-20b (it is not served serverless on the account used), so it has no
 # price on purpose: its cost is reported as null. Override or extend with MODEL_PRICES_JSON, e.g.

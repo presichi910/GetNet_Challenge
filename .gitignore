@@ -11,16 +11,12 @@ data/tickets.jsonl
 data/handoffs.jsonl
 data/checkpoints.sqlite*
 data/handoffs.sqlite*
+data/traces.sqlite*
 
-# Evaluation reports: keep only the ones that the README cites as evidence
+# Evaluation reports: only the published ones are tracked; every run writes more here
 eval/reports/*
 !eval/reports/latest.md
-!eval/reports/MARKER-DESIGN-*.md
-!eval/reports/BASELINE-*.md
 !eval/reports/REPEATS-*.md
 !eval/reports/RETRIEVAL-*.md
-
-# Personal how-to, not part of the deliverable
-docs/GITHUB_GUIDE.md
 
 *.mp4
