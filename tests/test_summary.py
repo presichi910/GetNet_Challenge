@@ -208,3 +208,26 @@ def test_the_handoff_record_carries_the_summary_only_when_there_is_one(repo, tmp
     plain, with_summary = [json.loads(line) for line in (tmp_path / "handoffs.jsonl").read_text(encoding="utf-8").splitlines()]
     assert "earlier_summary" not in plain
     assert with_summary["earlier_summary"].startswith("Customer asked")
+
+
+def test_messages_removed_by_the_summary_are_gone_from_the_database(tmp_path):
+    """RemoveMessage only changes the latest state. Without pruning, older checkpoints would keep
+    the raw messages (customer data) readable."""
+    llm = FakeSummaryLLM()
+    m = Memory(tmp_path / "c.sqlite")
+    try:
+        svc = ChatService(make_graph(llm, m.saver), memory=m)
+        svc.handle("FIRST-SECRET-TOKEN", "alice", conversation_id="c1")
+        for i in range(2, 6):
+            svc.handle(f"msg{i}", "alice", conversation_id="c1")
+        assert llm.calls and "FIRST-SECRET-TOKEN" in llm.calls[0][1].content  # it was summarised...
+
+        def stored_blobs():
+            q = ("SELECT checkpoint FROM checkpoints WHERE thread_id = 'alice:c1' "
+                 "UNION ALL SELECT value FROM writes WHERE thread_id = 'alice:c1'")
+            return [bytes(r[0]) for r in m.conn.execute(q) if r[0] is not None]
+
+        assert not any(b"FIRST-SECRET-TOKEN" in blob for blob in stored_blobs())  # ...and is nowhere in the DB
+        assert any(b"SUMMARY#" in blob for blob in stored_blobs())
+    finally:
+        m.close()

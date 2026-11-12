@@ -45,6 +45,11 @@ class ChatService:
             if created:  # the first turn of a thread failed: do not keep its slot or its leftovers
                 self.memory.abort_new_thread(thread_id)
             raise
+        if self.memory:
+            try:
+                self.memory.prune_thread(thread_id)  # only the latest checkpoint is ever needed
+            except Exception:  # noqa: BLE001 - the reply is ready, a prune problem must not lose it
+                log.warning("checkpoint prune failed for %s", thread_id, exc_info=True)
         outputs = state.get("agent_outputs", {})
 
         sources, seen = [], set()

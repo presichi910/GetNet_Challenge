@@ -108,6 +108,27 @@ class Memory:
             self.conn.commit()
         self.saver.delete_thread(thread_id)
 
+    def prune_thread(self, thread_id: str) -> None:
+        """Keep only the latest checkpoint of the thread. LangGraph writes several per turn and
+        keeps them all; without this the table grows with every turn, and the messages that the
+        rolling summary removed would stay readable in the older rows.
+
+        SqliteSaver.prune is not implemented in langgraph-checkpoint-sqlite 3.1.3 (it raises
+        NotImplementedError), so this is plain SQL. Checkpoint ids are uuid6, so the largest id is
+        the newest one (it is how the saver itself orders them)."""
+        with self.saver.lock:
+            self.conn.execute(
+                "DELETE FROM checkpoints WHERE thread_id = ? AND checkpoint_id < ("
+                " SELECT MAX(c.checkpoint_id) FROM checkpoints c"
+                " WHERE c.thread_id = checkpoints.thread_id AND c.checkpoint_ns = checkpoints.checkpoint_ns)",
+                (thread_id,))
+            self.conn.execute(
+                "DELETE FROM writes WHERE thread_id = ? AND NOT EXISTS ("
+                " SELECT 1 FROM checkpoints c WHERE c.thread_id = writes.thread_id"
+                " AND c.checkpoint_ns = writes.checkpoint_ns AND c.checkpoint_id = writes.checkpoint_id)",
+                (thread_id,))
+            self.conn.commit()
+
     def thread_count(self, user_id: str) -> int:
         with self.saver.lock:
             return self.conn.execute("SELECT COUNT(*) FROM threads WHERE user_id = ?", (user_id,)).fetchone()[0]

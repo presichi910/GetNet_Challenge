@@ -117,3 +117,40 @@ def test_close_releases_the_file_and_is_idempotent(db):
     mem.close()  # no error
     with pytest.raises(sqlite3.ProgrammingError):
         mem.conn.execute("SELECT 1")
+
+
+# ---------------- the table stays bounded and removed messages are really gone ----------------
+
+def rows(mem, table, thread_id):
+    return mem.conn.execute(f"SELECT COUNT(*) FROM {table} WHERE thread_id = ?", (thread_id,)).fetchone()[0]
+
+
+def test_only_the_latest_checkpoint_of_a_thread_is_kept(db):
+    mem = Memory(db)
+    try:
+        svc = ChatService(make_graph(mem.saver), memory=mem)
+        for i in range(6):
+            svc.handle(f"turn {i}", "alice", conversation_id="c1")
+        svc.handle("other", "bob", conversation_id="c1")
+        assert rows(mem, "checkpoints", "alice:c1") == 1 and rows(mem, "checkpoints", "bob:c1") == 1
+        # nothing left of the older checkpoints: any write belongs to the one that is kept
+        assert mem.conn.execute(
+            "SELECT COUNT(*) FROM writes w WHERE w.thread_id = 'alice:c1' AND NOT EXISTS ("
+            " SELECT 1 FROM checkpoints c WHERE c.thread_id = w.thread_id AND c.checkpoint_id = w.checkpoint_id)"
+        ).fetchone()[0] == 0
+        # and the conversation is intact
+        assert human_messages(svc.graph, "alice:c1") == [f"turn {i}" for i in range(6)]
+        assert svc.handle("next", "alice", conversation_id="c1").response.endswith("|next")
+    finally:
+        mem.close()
+
+
+def test_a_pruning_failure_does_not_lose_the_reply(db, monkeypatch, caplog):
+    mem = Memory(db)
+    try:
+        svc = ChatService(make_graph(mem.saver), memory=mem)
+        monkeypatch.setattr(mem, "prune_thread", lambda t: (_ for _ in ()).throw(RuntimeError("disk")))
+        r = svc.handle("hello", "alice")
+        assert r.response == "seen=hello" and "prune failed" in caplog.text
+    finally:
+        mem.close()
