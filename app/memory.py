@@ -56,6 +56,9 @@ class Memory:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False: the saver's lock is what keeps the threads apart
         self.conn = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
+        # deleted rows are overwritten with zeros, not just unlinked: without this the text of a
+        # deleted or purged conversation stays readable in the file's free pages
+        self.conn.execute("PRAGMA secure_delete=ON")
         self.saver = SqliteSaver(self.conn)
         self.saver.setup()  # creates the checkpoint tables, switches to WAL
         with self.saver.lock:
@@ -65,12 +68,16 @@ class Memory:
                     thread_id TEXT PRIMARY KEY,
                     user_id TEXT NOT NULL,
                     created_at REAL NOT NULL,
-                    last_active REAL NOT NULL
+                    last_active REAL NOT NULL,
+                    turns INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS threads_user ON threads(user_id);
                 CREATE INDEX IF NOT EXISTS threads_active ON threads(last_active);
                 """
             )
+            if "turns" not in {r[1] for r in self.conn.execute("PRAGMA table_info(threads)")}:
+                self.conn.execute("ALTER TABLE threads ADD COLUMN turns INTEGER NOT NULL DEFAULT 0")  # older file
+                self.conn.commit()
         self._closed = False
 
     # ---- registry -------------------------------------------------------------------------
@@ -129,6 +136,56 @@ class Memory:
                 (thread_id,))
             self.conn.commit()
 
+    def complete_turn(self, thread_id: str) -> None:
+        """A turn answered: count it. (begin_turn can not, the turn may still fail.)"""
+        with self.saver.lock:
+            self.conn.execute("UPDATE threads SET turns = turns + 1 WHERE thread_id = ?", (thread_id,))
+            self.conn.commit()
+
+    def list_threads(self, user_id: str) -> list[dict]:
+        """The user's own threads, most recent first. Metadata only, never content."""
+        with self.saver.lock:
+            rows = self.conn.execute(
+                "SELECT thread_id, created_at, last_active, turns FROM threads "
+                "WHERE user_id = ? ORDER BY last_active DESC, thread_id", (user_id,)).fetchall()
+        prefix = f"{user_id}:"
+        return [{"conversation_id": t[len(prefix):], "created_at": c, "last_active": a, "turns": n}
+                for t, c, a, n in rows]
+
+    def get_thread(self, user_id: str, thread_id: str) -> dict | None:
+        """Metadata of the thread if it exists AND is the user's. Anything else is None, so callers
+        can not tell a missing thread from somebody else's."""
+        with self.saver.lock:
+            row = self.conn.execute(
+                "SELECT created_at, last_active, turns FROM threads WHERE thread_id = ? AND user_id = ?",
+                (thread_id, user_id)).fetchone()
+        if not row or not thread_id.startswith(f"{user_id}:"):
+            return None
+        return {"conversation_id": thread_id[len(user_id) + 1:], "created_at": row[0],
+                "last_active": row[1], "turns": row[2]}
+
+    def delete_thread_for(self, user_id: str, thread_id: str) -> bool:
+        """Delete the user's thread: registry row (frees its slot against the limit), checkpoints and
+        writes. False, and nothing touched, if it does not exist or is not the user's."""
+        with self.saver.lock:
+            row = self.conn.execute("SELECT user_id FROM threads WHERE thread_id = ?", (thread_id,)).fetchone()
+            if not row or row[0] != user_id or not thread_id.startswith(f"{user_id}:"):
+                return False
+            self.conn.execute("DELETE FROM threads WHERE thread_id = ?", (thread_id,))
+            self.conn.commit()
+        self.saver.delete_thread(thread_id)
+        self._scrub()
+        return True
+
+    def _scrub(self) -> None:
+        """Fold the WAL into the main file and empty it: the pages it holds are older copies of what
+        was just deleted. (With secure_delete the main file has zeros where the text was.)"""
+        with self.saver.lock:
+            try:
+                self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except sqlite3.Error:
+                log.warning("WAL checkpoint failed after a delete", exc_info=True)
+
     def thread_count(self, user_id: str) -> int:
         with self.saver.lock:
             return self.conn.execute("SELECT COUNT(*) FROM threads WHERE user_id = ?", (user_id,)).fetchone()[0]
@@ -172,6 +229,7 @@ class Memory:
         except sqlite3.ProgrammingError:  # closed while we ran (shutdown)
             return 0
         if purged or orphans:
+            self._scrub()
             log.info("retention: purged %d expired threads (> %d days idle) and %d orphans",
                      purged, self.ttl_days, len(orphans))
         return purged + len(orphans)
