@@ -72,8 +72,22 @@ All roles share one 8K tokens/min bucket, hence the long pause. A clean run repl
 ### 4. Support route with tools, inside the container
 The 2026-11-11 container test only covered a greeting (Router and Synthesizer), because `qwen3.8-27b` cannot run the agents.
 
+**This item now also validates the container without root** (step 3, partial: the image runs as `app`, uid 10001, and `./data` became the named volume `data`). Before the LLM calls, check the infrastructure. It needs no quota, but it has to happen on the container this item rebuilds, because `up -d --build` recreates the old root container and creates an **empty** volume:
+
 ```bash
+docker compose down
+# one-time copy of ./data into the volume, see README "Production hardening"
+# (Git Bash on Windows: MSYS_NO_PATHCONV=1 and $(pwd -W) instead of $PWD)
+docker compose run --rm --no-deps -u root -v "$PWD/data:/old:ro" --entrypoint sh api \
+  -c 'cp -a /old/. /app/data/ && chown -R 10001:10001 /app/data'
 SUPPORT_MODEL=openai/gpt-oss-120b docker compose up -d --build
+docker compose exec -T api id -u                 # 10001
+curl -s localhost:8000/health                    # {"status":"ok","kb_chunks": > 0}
+```
+
+Then the LLM part:
+
+```bash
 T1=$(python -m scripts.issue_token --user cliente1988 | head -1)
 T2=$(python -m scripts.issue_token --user cliente2024 | head -1)
 chat() { curl -s -X POST localhost:8000/chat -H "Authorization: Bearer $1" -H "Content-Type: application/json" -d "$2"; echo; }
@@ -83,6 +97,9 @@ chat $T2 '{"message":"What is my plan?"}'
 chat $T1 '{"message":"What is my plan?"}'
 ```
 
+- [ ] `id -u` is 10001, `/health` reports the migrated knowledge base (1493 chunks on 2026-11-11) and the container is `healthy` in `docker compose ps`.
+- [ ] Not covered by the no-LLM checks, only by a real `/chat` that escalates: the **handoff and ticket writes done by the agent's tools** (not by a direct file append) land in the volume as uid 10001. After the `h0x`-style message (e.g. "I want to talk to a person"), `docker compose exec api tail -n 1 /app/data/handoffs.jsonl` shows the new record.
+- [ ] `docker compose run --rm eval python -m eval.run_eval --only x04` (or any single case) writes its report to `./eval/reports` on the host. The no-LLM check only showed that the directory is writable.
 - [ ] First call: HTTP 200, `degraded` false, plan `["support"]`, tool `get_payout_schedule` in `tool_calls`.
 - [ ] Second call: refuses, no data tool called.
 - [ ] Third and fourth: each answer shows its own customer (Marina Souza on `cliente2024`, Carlos Mendes on `cliente1988`).

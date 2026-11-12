@@ -29,7 +29,7 @@ flowchart TD
 1. The router picks the agents (`support`, `knowledge`, both, or none) and detects the language. If both are needed, support goes first so knowledge can use what it found.
 2. Each agent uses tools. Support reads account data, knowledge searches the Getnet KB (Chroma) or the web (Tavily).
 3. The synthesizer builds the final reply: none ran → answers directly, one → passes it through, two → merges them.
-4. If the user asks for a person, or nobody could resolve it, the handoff node opens a ticket, saves a record in `data/handoffs.jsonl` and tells the user.
+4. If the user asks for a person, or nobody could resolve it, the handoff node opens a ticket, saves a record in `data/handoffs.jsonl` (in the `data` volume when running in Docker, see Production hardening) and tells the user.
 
 The response also includes which agents ran, the tools they called and the sources, so it's easy to debug.
 
@@ -168,6 +168,24 @@ Nine Support/handoff cases (`q03 q05 q08 x01 x03 x04 h01 h02 h03`), one run each
 - **`q08` fix: `SUPPORT_MODEL`.** Support runs on its own model variable, set to the 120b in `.env.example`. In the one controlled run it called `get_recent_transactions`; it has not been confirmed with a full eval yet. The eval now records the exact tool calls with their arguments (`tool_calls` in the JSON report).
 
 Handoff behavior: explicit requests for a human always escalated. The unanswerable loan question escalated most of the time but not always, since the agent decides whether to call `escalate_to_human` (see Limitations).
+
+## Production hardening
+
+- **No root in the container.** The image runs as `app` (uid/gid 10001). The code under `/app` is root-owned and read-only for that user, and only `/app/data` and `/app/eval/reports` are writable by it.
+- **Data lives in a named volume (`data`), not in `./data`.** A bind mount takes its permissions from the host: on Docker Desktop the old `data/chroma` was root-owned (755), so uid 10001 could not write Chroma's SQLite file. A new named volume is created with the image's owner for `/app/data`, so no root entrypoint or `chown` at start is needed, and a live SQLite database stays out of the OneDrive-synced folder. `./eval/reports` stays a bind mount so you can read the reports (on a Linux host make it writable for uid 10001 or run the `eval` service with `--user "$(id -u):$(id -g)"`).
+- **One-time migration of an existing `./data`** (stop the API first so Chroma is not copied while it writes; the first `docker compose run` creates the volume):
+
+  ```bash
+  docker compose down
+  # Git Bash on Windows: prefix with MSYS_NO_PATHCONV=1 and use $(pwd -W) instead of $PWD
+  docker compose run --rm --no-deps -u root -v "$PWD/data:/old:ro" --entrypoint sh api \
+    -c 'cp -a /old/. /app/data/ && chown -R 10001:10001 /app/data'
+  docker compose up -d
+  ```
+
+  Or skip the copy and rebuild the knowledge base: `docker compose run --rm ingest` (uses Voyage and Tavily). If a volume ever has the wrong owner, repeat only the `chown` with `-u root --entrypoint chown api -R 10001:10001 /app/data`.
+- **Read the handoff queue and tickets from the volume:** `docker compose exec api cat /app/data/handoffs.jsonl`, or `docker compose cp api:/app/data/handoffs.jsonl .`. Running outside Docker still uses `./data`.
+- **CI** (`.github/workflows/ci.yml`, on push and pull request to `main`): `pytest` on Python 3.12 with a pip cache, no `.env` and no API keys (only a fake `JWT_SECRET` in the job), plus a `docker build` (no push) that fails if the container's uid is not 10001.
 
 ## Limitations
 
