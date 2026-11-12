@@ -23,12 +23,22 @@ from app.service import ChatService
 log = logging.getLogger("api")
 
 
-async def _purge_loop(memory: Memory, every_seconds: float) -> None:
-    """Retention: delete idle threads now and then. A failed pass is logged and tried again."""
+def _purge_once(memory: Memory, handoffs: HandoffStore | None) -> None:
+    """One retention pass: idle threads, then idle handoffs (same THREAD_TTL_DAYS). One failing does
+    not skip the other."""
+    try:
+        memory.purge_expired()
+    finally:
+        if handoffs is not None:
+            handoffs.purge_expired(memory.ttl_days)
+
+
+async def _purge_loop(memory: Memory, every_seconds: float, handoffs: HandoffStore | None = None) -> None:
+    """Retention: delete idle threads and handoffs now and then. A failed pass is logged and tried again."""
     while True:
         await asyncio.sleep(every_seconds)
         try:
-            await asyncio.to_thread(memory.purge_expired)
+            await asyncio.to_thread(_purge_once, memory, handoffs)
         except Exception:  # noqa: BLE001 - never kill the loop
             log.exception("Thread purge failed")
 
@@ -64,10 +74,10 @@ async def lifespan(app: FastAPI):
                  s.thread_ttl_days or "off", s.max_threads_per_user or "unlimited")
         if s.thread_ttl_days:
             try:
-                memory.purge_expired()  # at startup
+                _purge_once(memory, handoffs)  # at startup
             except Exception:  # noqa: BLE001 - a purge problem must not stop the API
                 log.exception("Startup thread purge failed")
-            purge_task = asyncio.create_task(_purge_loop(memory, s.purge_interval_minutes * 60))
+            purge_task = asyncio.create_task(_purge_loop(memory, s.purge_interval_minutes * 60, handoffs))
         n = collection_size()
         if n == 0:
             log.warning("Knowledge base is EMPTY. Run `python -m app.rag.ingest` "

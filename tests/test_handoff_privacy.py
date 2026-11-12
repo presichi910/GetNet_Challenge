@@ -124,3 +124,79 @@ def test_the_importer_skips_audit_lines_it_wrote_itself(store, audit):
                                  "reason": "user_requested", "user_message": "x"})
     assert store.import_jsonl(audit) == {"imported": 0, "already_there": 0, "invalid": 0, "redacted": 1}
     assert store.list_queue() == []
+
+
+# ---------------- retention: handoffs expire with THREAD_TTL_DAYS ----------------
+
+DAY = 86400
+T0 = 1_800_000_000.0  # a fixed "now" for the store tests
+
+
+def seeded_old(store, hid, age_days, user=A, text="old case", base=T0):
+    """A handoff created `age_days` before T0 (through the importer, which keeps the record's date)."""
+    from datetime import datetime, timezone
+
+    created = datetime.fromtimestamp(base - age_days * DAY, timezone.utc).isoformat()
+    path = Path(str(store.path) + f".{hid}.jsonl")
+    path.write_text(__import__("json").dumps({"handoff_id": hid, "created_at": created, "user_id": user,
+                                              "reason": "user_requested", "user_message": text}) + "\n", encoding="utf-8")
+    store.import_jsonl(path)
+    path.unlink()
+
+
+def test_idle_handoffs_expire_in_any_status_and_take_their_messages_and_events_with_them(store):
+    seeded_old(store, "HND-OLDPEN", 40, text=f"never answered {TOKEN}")
+    seeded_old(store, "HND-OLDRES", 40)
+    store.claim("HND-OLDRES", "ops1", now=T0 - 39 * DAY)
+    store.reply("HND-OLDRES", "ops1", "approve", f"old reply {REPLY_TOKEN}", "key-00000001", now=T0 - 39 * DAY)
+    seeded_old(store, "HND-FRESH", 5)
+    assert TOKEN.encode() in raw_bytes(store)
+
+    assert store.purge_expired(30, now=T0) == 2
+
+    assert [h["id"] for h in store.list_queue()] == ["HND-FRESH"]
+    assert store.messages_for_conversation(A, "default") == []
+    assert store.events("HND-OLDPEN") == [] and store.events("HND-OLDRES") == []
+    assert [e["action"] for e in store.events("HND-FRESH")] == ["imported"]  # the fresh one keeps its trail
+    blob = raw_bytes(store)
+    assert TOKEN.encode() not in blob and REPLY_TOKEN.encode() not in blob
+
+
+def test_recent_operator_activity_keeps_an_old_handoff_alive(store):
+    seeded_old(store, "HND-OLD", 40)
+    store.claim("HND-OLD", "ops1", now=T0 - 2 * DAY)  # an operator touched it two days ago
+    assert store.purge_expired(30, now=T0) == 0
+    assert store.get("HND-OLD") is not None
+
+
+def test_ttl_zero_never_purges_handoffs_and_a_closed_store_is_a_quiet_noop(store, tmp_path):
+    seeded_old(store, "HND-OLD", 4000)
+    assert store.purge_expired(0, now=T0) == 0 and store.get("HND-OLD") is not None
+    from app.handoff_store import HandoffStore
+
+    s2 = HandoffStore(tmp_path / "other.sqlite")
+    s2.close()
+    assert s2.purge_expired(30) == 0
+
+
+def test_the_lifespan_purges_expired_handoffs_at_startup(auth_env, monkeypatch, tmp_path):
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from app.handoff_store import HandoffStore
+    from app.main import app
+    from tests.test_retention import lifespan_env
+
+    db = tmp_path / "checkpoints.sqlite"
+    seed = HandoffStore(tmp_path / "handoffs.sqlite")  # where lifespan_env points the queue
+    seeded_old(seed, "HND-OLD", 40, base=time.time())
+    seeded_old(seed, "HND-NEW", 2, base=time.time())
+    seed.close()
+
+    lifespan_env(monkeypatch, db, THREAD_TTL_DAYS=30)
+    try:
+        with TestClient(app) as client:
+            assert [h["id"] for h in client.get("/operator/handoffs", headers=op()).json()["handoffs"]] == ["HND-NEW"]
+    finally:
+        app.state.service = None

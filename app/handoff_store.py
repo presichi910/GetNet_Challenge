@@ -363,6 +363,32 @@ class HandoffStore:
             log.info("handoffs erased with their conversation: user=%s conv=%s count=%d", merchant_id, conversation_id, len(ids))
         return len(ids)
 
+    def purge_expired(self, ttl_days: int, now: float | None = None) -> int:
+        """Retention, the same THREAD_TTL_DAYS as the conversations: erase every handoff whose last
+        activity (created, claimed or resolved, the latest) is more than `ttl_days` old, in any status,
+        with its operator messages and events. 0 = never. A case that was still open is logged: it
+        expired without anybody answering. Returns how many went."""
+        if not ttl_days or self._closed:
+            return 0
+        now = time.time() if now is None else now
+        cutoff = now - ttl_days * 86400
+        try:
+            with self._tx() as c:
+                rows = c.execute(
+                    "SELECT id, status FROM handoffs WHERE MAX(created_at, COALESCE(claimed_at, 0), "
+                    "COALESCE(resolved_at, 0)) < ?", (cutoff,)).fetchall()
+                self._erase(c, [r["id"] for r in rows])
+                # events whose handoff is gone (a half-finished erase) hold an operator id and a reason
+                c.execute("DELETE FROM handoff_events WHERE handoff_id NOT IN (SELECT id FROM handoffs)")
+        except sqlite3.ProgrammingError:  # closed while we ran (shutdown)
+            return 0
+        if rows:
+            self._scrub()
+            unanswered = sum(1 for r in rows if r["status"] != "resolved")
+            log.info("retention: erased %d handoffs idle for more than %d days (%d never answered)",
+                     len(rows), ttl_days, unanswered)
+        return len(rows)
+
     # ---- lifecycle -------------------------------------------------------------------------------
 
     def close(self) -> None:
