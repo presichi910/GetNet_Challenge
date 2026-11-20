@@ -99,3 +99,12 @@ to measure it.
    and the hosts left are listed as not measured.
 9. **Applied by code**: `eval/host_latency.py` applies the rule and writes `eval/reports/HOST-LATENCY-<stamp>.md` (generated) with the table of every host and the winner, whatever it says. If no host
    meets the rule, `deepinfra/bf16` stays and the report says so. The default pinned host changes to the winner after the report, in its own commit.
+
+### Enmienda 1a (19-nov, still before the measurement): a reference arm
+
+When the candidate list was read (free, public endpoint, no call made to any model), `deepinfra/bf16`, the host pinned until now, did NOT meet the uptime filter of the rule (96.7 %
+over the last 30 minutes; the same endpoint listed 100 % a few hours earlier), and neither did `groq` (96.7 %). By the rule `deepinfra/bf16` is therefore not a candidate today. To
+tell whether the slowness of the first smoke belongs to that host or to our own retries, `deepinfra/bf16` is ALSO measured, in exactly the same way (10 calls, one attempt each,
+`q01` twice), as a **reference**: it is listed apart in the report, it never enters the decision, it is never "the fastest" that sets the bar, and it cannot win. If it does meet the
+filter at the time of the measurement it is simply a candidate, measured once. Its cost counts against the US$0.10 cap, and it is measured last.
+
