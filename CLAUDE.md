@@ -27,6 +27,15 @@ Plan de trabajo: `docs/PLAN_96.md` (local, no se commitea). Estas reglas se suma
 11. **No se copia código ni prompts** de `farrulla-darze/skywalker` (sin licencia). Las ideas sí, implementadas por nosotros.
 12. **Antes de cada commit local:** `python -m scripts.ci_local` (ruff, mypy, bandit, pip-audit y `pytest -m "not eval"`, los mismos gates que `.github/workflows/ci.yml`; `--full` añade promtool y el build de Docker, para antes del push final).
 
+13. **Hook local `pre-commit` (no versionado: vive en `.git/hooks/`, así que un clon nuevo NO lo trae).** Corre `python -m scripts.ci_local` y **bloquea el commit si el código de salida no es 0** (~2 min por commit; con `ci_local` fallando en ruff sale en segundos). Sustituye a "correr `ci_local` a mano" (regla 12). Para reinstalarlo, guardar esto como `.git/hooks/pre-commit` y `chmod +x`:
+    ```sh
+    #!/bin/sh
+    cd "$(git rev-parse --show-toplevel)" || exit 1
+    PY=".venv/Scripts/python"; [ -x "$PY" ] || PY=".venv/bin/python"; [ -x "$PY" ] || PY="python"
+    "$PY" -X utf8 -m scripts.ci_local || { echo "pre-commit: ci_local failed: commit blocked" >&2; exit 1; }
+    ```
+    Comprobado el 2026-11-19 con un commit que ruff rechaza (`import os` sin usar): salió con código 1 y `HEAD` no cambió. No uses `git commit --no-verify` salvo orden expresa de Lucca. Al encadenar comandos, no ocultes el código de salida de `ci_local` con una tubería (`... | tail`): el 2026-11-19 un commit salió en rojo por eso (`be93657`, arreglado en `8c20ab8`).
+
 ## Arquitectura (lo que importa)
 `summarize -> router -> (knowledge | support, en el orden del plan) -> synthesizer -> observe -> verify -> [request_approval] -> END`; `handoff -> END`. `observe` va al `handoff` en vez de a `verify` cuando marca `escalate` (solo con `REPLAN_MAX>=2`; con 0, el defecto, no hace nada). `request_approval` es un nodo solo si hay aprobaciones configuradas (la API con `APPROVAL_REQUIRED_CATEGORIES` no vacío; el eval no las usa) y corre solo si el turno propuso un ticket.
 - `app/graph.py`: `build_graph(..., verify=None, observe=None, request_approval=None)` (sin esos nodos el grafo es router -> agentes -> sintetizador); `next_node` decide agente / handoff / sintetizador.
