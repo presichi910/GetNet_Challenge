@@ -1,0 +1,44 @@
+[
+  {
+    "at_utc": "2026-11-20 04:43:59",
+    "block": "M1 (before the guard)",
+    "command": null,
+    "outcome": "note",
+    "estimate_usd": null,
+    "real_usd": 0.042021449,
+    "settled": true,
+    "reported_cost_usd": null,
+    "assumed_roles": [],
+    "text": "Everything the key had spent before the guard existed: the two V2 runs, the two V3 smokes, the host measurement and its crashed attempt. The responses' usage.cost summed to about US$0.0321 for these; the key's counter is the figure used.",
+    "n": 1
+  },
+  {
+    "at_utc": "2026-11-20 04:45:35",
+    "block": "cost guard smoke",
+    "command": "python -m eval.run_eval --regular-only --no-judge --only m01 --label cost guard smoke --require-clean --keep-latest --pause 0",
+    "outcome": "completed",
+    "n_case_runs": 1,
+    "estimate_usd": 0.0011120816782160734,
+    "safety": 1.5,
+    "spent_before_usd": 0.042021449,
+    "counter_after_usd": 0.042215849,
+    "real_usd": 0.00019439999999999735,
+    "settled": true,
+    "reported_cost_usd": 0.0001944,
+    "assumed_roles": [],
+    "n": 2
+  },
+  {
+    "at_utc": "2026-11-20 04:47:16",
+    "block": "ledger housekeeping",
+    "command": null,
+    "outcome": "note",
+    "estimate_usd": null,
+    "real_usd": 0.0,
+    "settled": true,
+    "reported_cost_usd": null,
+    "assumed_roles": [],
+    "text": "Two entries (block rejudge, at 04:39 and 04:43 UTC on 2026-11-20) were written by a test that ran rejudge without --no-cost-guard, so it read the real key and wrote the real ledger: they spent nothing and were removed. tests/conftest.py now makes any test that reaches the key counter, the price listing or the real ledger fail loudly.",
+    "n": 3
+  }
+]

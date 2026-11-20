@@ -1,0 +1,115 @@
+{
+  "summary": {
+    "cases": 1,
+    "provider_errors": 0,
+    "routing_accuracy": 1.0,
+    "tool_use_accuracy": 1.0,
+    "degraded_rate": 0.0,
+    "latency_ms_p50": 7873,
+    "latency_ms_p95": 7873,
+    "handoff_accuracy": 1.0,
+    "handoff_rate": 0.0,
+    "memory_accuracy": 1.0,
+    "agent_tokens": 1496,
+    "judge_tokens": 0,
+    "agent_tokens_per_case_mean": 1496,
+    "agent_cost_usd": 0.0001944,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.0001944,
+    "tokens_by_model": [
+      {
+        "role": "agents",
+        "model": "openai/gpt-oss-120b",
+        "calls": 2,
+        "input_tokens": 1392,
+        "output_tokens": 104,
+        "hosts": [
+          "Groq"
+        ],
+        "cost_usd": 0.0001944
+      }
+    ],
+    "commit": "01e933339682deb973ecc4bbe6ae36f4cb286387",
+    "tree_clean": true,
+    "replan_max": 0,
+    "rag_mode": "dense",
+    "verifier_mode": "statements",
+    "approvals": "off (eval)",
+    "fallback_provider": "off (eval)",
+    "agent_provider": "openrouter",
+    "judge_provider": "openrouter",
+    "openrouter_provider_order": "openai/gpt-oss-120b=groq; qwen/qwen3.8-27b=alibaba",
+    "openrouter_allow_fallbacks": false,
+    "label": "cost guard smoke"
+  },
+  "rows": [
+    {
+      "id": "m01_recall_color",
+      "message": "What favorite color did I tell you?",
+      "plan": [],
+      "answer": "You mentioned that your favorite color is green.",
+      "tools_called": [],
+      "evidence": [],
+      "verify_note": "",
+      "verify_raw": "",
+      "tool_calls": [],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 7873,
+      "handoff": null,
+      "handoff_ok": true,
+      "history": [
+        {
+          "role": "user",
+          "content": "My favorite color is green, please remember it."
+        },
+        {
+          "role": "assistant",
+          "content": "Got it, your favorite color is green."
+        }
+      ],
+      "memory": {
+        "restart": true,
+        "seeded": 2,
+        "restored": 2,
+        "restored_intact": true,
+        "after": 4,
+        "answered_in_thread": true
+      },
+      "memory_ok": true,
+      "usage": {
+        "input_tokens": 1392,
+        "output_tokens": 104,
+        "total_tokens": 1496,
+        "cost_usd": 0.0001944,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 1,
+            "latency_ms": 721,
+            "input_tokens": 1106,
+            "output_tokens": 69,
+            "cost_usd": 0.0001305,
+            "cost_source": "provider"
+          },
+          {
+            "node": "synthesizer",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 1,
+            "latency_ms": 339,
+            "input_tokens": 286,
+            "output_tokens": 35,
+            "cost_usd": 6.39e-05,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    }
+  ]
+}
