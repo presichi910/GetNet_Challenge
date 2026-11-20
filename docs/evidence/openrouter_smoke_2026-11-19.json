@@ -1,0 +1,153 @@
+{
+  "_capture": {
+    "command": "python -m scripts.openrouter_smoke",
+    "at_utc": "2026-11-20 03:22:33",
+    "commit": "3f85f009c442577808f2a684a1a40dcd93741d20",
+    "tree_clean": true,
+    "stored": "the non-secret fields of each request and the usage fields of each response; never the key, a header or a message text",
+    "shows": "which host answered each call, that a tool call works on the pinned host, what the judge costs with reasoning off and at the default effort (tokens and the real usage.cost), and that the real cost equals the pinned host's price",
+    "does_not_show": "agreement of this judge with the Groq judge (that is block C2), one call per case so no variation, latency, or that the cap `max_completion_tokens` never truncates (it did not here: see call C)"
+  },
+  "settings": {
+    "agent_model": "openai/gpt-oss-120b",
+    "judge_model": "qwen/qwen3.8-27b",
+    "openrouter_provider_order": {
+      "openai/gpt-oss-120b": [
+        "deepinfra/bf16"
+      ],
+      "qwen/qwen3.8-27b": [
+        "alibaba"
+      ]
+    },
+    "allow_fallbacks": false,
+    "agent_reasoning_effort": "low",
+    "judge_reasoning_effort": "none"
+  },
+  "calls": [
+    {
+      "call": "A: agent gpt-oss-120b with one tool",
+      "request": {
+        "model": "openai/gpt-oss-120b",
+        "provider": {
+          "allow_fallbacks": false,
+          "order": [
+            "deepinfra/bf16"
+          ]
+        },
+        "reasoning": {
+          "effort": "low"
+        },
+        "max_completion_tokens": 400,
+        "temperature": 0.0,
+        "tools": [
+          "get_weather"
+        ],
+        "synthetic_messages": true
+      },
+      "response": {
+        "response_id": "gen-1795144923-XDlFw69a3iQPTP60VyZB",
+        "host_that_answered": "DeepInfra",
+        "expected_host": "deepinfra",
+        "pinned_host_answered": true,
+        "model": "openai/gpt-oss-120b",
+        "finish_reason": "tool_calls",
+        "prompt_tokens": 125,
+        "completion_tokens": 40,
+        "reasoning_tokens": 7,
+        "real_cost_usd": 1.1425e-05,
+        "content_chars": 0,
+        "tool_calls": [
+          "get_weather"
+        ]
+      }
+    },
+    {
+      "call": "B: judge as the code builds it (reasoning off)",
+      "request": {
+        "model": "qwen/qwen3.8-27b",
+        "provider": {
+          "allow_fallbacks": false,
+          "order": [
+            "alibaba"
+          ]
+        },
+        "reasoning": {
+          "effort": "none"
+        },
+        "max_completion_tokens": 500,
+        "temperature": 0.0,
+        "tools": [],
+        "synthetic_messages": true
+      },
+      "response": {
+        "response_id": "gen-1795144933-nM4p1pxnEe5ETRFLszBy",
+        "host_that_answered": "Alibaba",
+        "expected_host": "alibaba",
+        "pinned_host_answered": true,
+        "model": "qwen/qwen3.8-27b",
+        "finish_reason": "stop",
+        "prompt_tokens": 659,
+        "completion_tokens": 127,
+        "reasoning_tokens": 0,
+        "real_cost_usd": 0.000603925,
+        "content_chars": 382,
+        "tool_calls": [],
+        "parseable_by_eval_judge": true
+      }
+    },
+    {
+      "call": "C: judge with the provider's default reasoning",
+      "request": {
+        "model": "qwen/qwen3.8-27b",
+        "provider": {
+          "allow_fallbacks": false,
+          "order": [
+            "alibaba"
+          ]
+        },
+        "reasoning": "omitted: the provider's default",
+        "max_completion_tokens": 500,
+        "temperature": 0.0,
+        "tools": [],
+        "synthetic_messages": true
+      },
+      "response": {
+        "response_id": "gen-1795144937-Quf1nvfHnodxjwIASsnh",
+        "host_that_answered": "Alibaba",
+        "expected_host": "alibaba",
+        "pinned_host_answered": true,
+        "model": "qwen/qwen3.8-27b",
+        "finish_reason": "stop",
+        "prompt_tokens": 695,
+        "completion_tokens": 997,
+        "reasoning_tokens": 880,
+        "real_cost_usd": 0.002837725,
+        "content_chars": 331,
+        "tool_calls": [],
+        "parseable_by_eval_judge": true
+      }
+    }
+  ],
+  "judge_call_B_estimates_usd": {
+    "alibaba (the pinned host)": 0.000603925,
+    "listed model price": 0.00031894,
+    "old Groq table": 0.0010352
+  },
+  "judge_call_B_real_cost_usd": 0.000603925,
+  "judge_default_effort_vs_off": {
+    "completion_tokens": [
+      997,
+      127
+    ],
+    "reasoning_tokens": [
+      880,
+      0
+    ],
+    "real_cost_usd": [
+      0.002837725,
+      0.000603925
+    ],
+    "order": "[default effort, reasoning off]"
+  },
+  "total_real_cost_usd": 0.003453075
+}
