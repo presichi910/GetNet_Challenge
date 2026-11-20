@@ -233,6 +233,45 @@ def test_a_timeout_counts_in_the_p50_with_the_time_it_took_and_an_error_breaks_t
     assert h["p50_ms"] == 1000 and h["max_ms"] == 120000 and h["calls_error"] == 1 and h["tools_work"] is False
 
 
+def fake_run_eval(monkeypatch, tmp_path, rows_of_each_run):
+    """eval.run_eval replaced by a function that writes the JSON files a run would write."""
+    monkeypatch.setattr(hl, "REPORTS", tmp_path)
+
+    def run(cmd, **_kw):
+        label = cmd[cmd.index("--label") + 1]
+        for i, row in enumerate(rows_of_each_run):
+            summary = {"label": label, "provider_errors": 1 if "provider_error" in row else 0}
+            (tmp_path / f"20261119-00000{i}.json").write_text(json.dumps({"summary": summary, "rows": [row]}), encoding="utf-8")
+        return type("Done", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(hl.subprocess, "run", run)
+
+
+GOOD_ROW = {"id": "q01_compare_plans", "latency_ms": 5000, "plan": ["knowledge"], "tools_called": ["search_getnet_kb"], "degraded": False,
+            "usage": {"cost_usd": 0.0004, "by_node": [{"node": "router", "host": "Crusoe"}]}}
+
+
+def test_q01_with_a_provider_error_is_data_not_a_crash(monkeypatch, tmp_path):
+    error_row = {"id": "q01_compare_plans", "latency_ms": 3800, "provider_error": "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found ... Filter by Tool Compatibility"}
+    fake_run_eval(monkeypatch, tmp_path, [error_row, error_row])
+    out = hl.run_q01(EP)
+    assert out["ran"] and out["ok"] is False and out["cost_usd"] == 0 and out["latencies_ms"] == [3800, 3800] and out["hosts"] == []
+    assert len(out["errors"]) == 2 and "404" in out["errors"][0]
+
+
+def test_q01_that_runs_twice_on_the_pinned_host_with_the_base_plan_and_tool_is_ok(monkeypatch, tmp_path):
+    fake_run_eval(monkeypatch, tmp_path, [GOOD_ROW, GOOD_ROW])
+    out = hl.run_q01(EP)
+    assert out["ok"] is True and out["hosts"] == ["Crusoe"] and out["cost_usd"] == pytest.approx(0.0008) and out["latencies_ms"] == [5000, 5000] and out["errors"] == []
+
+
+@pytest.mark.parametrize("change", [{"plan": ["support"]}, {"tools_called": []}, {"degraded": True},
+                                    {"usage": {"cost_usd": 0.0004, "by_node": [{"node": "router", "host": "Together"}]}}])
+def test_q01_is_not_ok_when_the_plan_the_tool_or_the_host_differ(monkeypatch, tmp_path, change):
+    fake_run_eval(monkeypatch, tmp_path, [GOOD_ROW, {**GOOD_ROW, **change}])
+    assert hl.run_q01(EP)["ok"] is False
+
+
 def test_the_report_is_generated_from_the_measurement_and_names_the_winner():
     h = hl.summarize_host(EP, ten_calls([100] * 10), Q01_OK)
     endpoints = [endpoint("crusoe/bf16", name="Crusoe"), endpoint("x/fp4", quant="fp4")]
