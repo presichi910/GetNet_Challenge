@@ -39,6 +39,11 @@ DEFAULT_PRICES: dict[str, tuple[float, float]] = {
     "openai/gpt-oss-120b": (0.15, 0.60),   # Groq
     "openai/gpt-oss-20b": (0.075, 0.30),   # Groq
     "qwen/qwen3.8-27b": (0.80, 4.00),      # Groq, the eval judge
+    # OpenRouter: priced by the HOST the call is pinned to ("<model>@<first host of OPENROUTER_PROVIDER_ORDER>", set by app/llm.py), never by the
+    # list price of the model, which is another host's. Prices of 2026-11-19 from GET /api/v1/models/<id>/endpoints (docs/evidence/openrouter_models_*.json).
+    # They are only the estimate of a call that comes back without a cost: OpenRouter returns the real `usage.cost` and that one wins.
+    "openai/gpt-oss-120b@deepinfra/bf16": (0.037, 0.17),
+    "qwen/qwen3.8-27b@alibaba": (0.425, 2.55),
 }
 NODES = ("summarize", "router", "knowledge", "support", "synthesizer", "observe", "verify", "handoff")
 RATE_LIMIT_RE = re.compile(r"RateLimit|\b429\b|rate.?limit|too many requests", re.I)
@@ -107,6 +112,31 @@ def _usage_of(response) -> tuple[int, int]:
     return int(token_usage.get("prompt_tokens", 0)), int(token_usage.get("completion_tokens", 0))
 
 
+def _provider_cost(response) -> float | None:
+    """The cost the provider itself reports for the call (OpenRouter: `usage.cost`, in USD), or None. langchain_openai keeps the raw usage
+    dict in `llm_output["token_usage"]` and in the message's `response_metadata`."""
+    candidates = [(getattr(response, "llm_output", None) or {}).get("token_usage")]
+    try:
+        candidates.append(response.generations[0][0].message.response_metadata.get("token_usage"))
+    except (AttributeError, IndexError):
+        pass
+    for usage in candidates:
+        cost = usage.get("cost") if isinstance(usage, dict) else None
+        if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost >= 0:
+            return float(cost)
+    return None
+
+
+def _combine_sources(sources) -> str | None:
+    """"provider" (every cost is what the provider reported), "estimated" (list prices, or no price at all) or "mixed"; None without calls."""
+    found = {s for s in sources if s}
+    if not found:
+        return None
+    if found == {"provider"}:
+        return "provider"
+    return "mixed" if "provider" in found else "estimated"
+
+
 def _error_type(error: BaseException) -> str:
     """The error class and, if there is one, the HTTP status. Never the message (it can echo the input)."""
     status = getattr(error, "status_code", None)
@@ -130,22 +160,30 @@ class TurnCollector(BaseCallbackHandler):
 
     # ---- LLM ----
     def on_chat_model_start(self, serialized, messages, *, run_id: UUID, metadata=None, **kwargs: Any) -> None:
-        self._start(run_id, {"kind": "llm", "node": _node_of(metadata), "name": _model_of(metadata, kwargs)})
+        self._start(run_id, {"kind": "llm", "node": _node_of(metadata), "name": _model_of(metadata, kwargs),
+                             "price_key": (metadata or {}).get("price_key")})
 
     def on_llm_start(self, serialized, prompts, *, run_id: UUID, metadata=None, **kwargs: Any) -> None:
-        self._start(run_id, {"kind": "llm", "node": _node_of(metadata), "name": _model_of(metadata, kwargs)})
+        self._start(run_id, {"kind": "llm", "node": _node_of(metadata), "name": _model_of(metadata, kwargs),
+                             "price_key": (metadata or {}).get("price_key")})
 
     def on_llm_end(self, response, *, run_id: UUID, **kwargs: Any) -> None:
         span = self._finish(run_id)
         if span is None:
             return
         span["input_tokens"], span["output_tokens"] = _usage_of(response)
-        span["cost_usd"] = cost_usd(span["name"], span["input_tokens"], span["output_tokens"], self.prices)
+        real = _provider_cost(response)
+        if real is not None:  # what the provider charged for THIS call beats any price table
+            span["cost_usd"], span["cost_source"] = real, "provider"
+        else:
+            span["cost_usd"] = cost_usd(span.get("price_key") or span["name"], span["input_tokens"], span["output_tokens"], self.prices)
+            span["cost_source"] = "estimated" if span["cost_usd"] is not None else "unpriced"
 
     def on_llm_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
         span = self._finish(run_id)
         if span is not None:
-            span.update(ok=False, error_type=_error_type(error), cost_usd=0.0 if span["name"] in self.prices else None)
+            span.update(ok=False, error_type=_error_type(error),
+                        cost_usd=0.0 if (span.get("price_key") or span["name"]) in self.prices else None)
 
     # ---- tools ----
     def on_tool_start(self, serialized, input_str, *, run_id: UUID, metadata=None, **kwargs: Any) -> None:
@@ -185,21 +223,24 @@ class TurnCollector(BaseCallbackHandler):
         groups: dict[tuple[str, str], dict] = {}
         for s in self.llm_spans():
             g = groups.setdefault((s["node"], s["name"]), {"node": s["node"], "model": s["name"], "calls": 0,
-                                                             "input_tokens": 0, "output_tokens": 0, "costs": []})
+                                                             "input_tokens": 0, "output_tokens": 0, "costs": [], "sources": []})
             g["calls"] += 1
+            g["sources"].append(s.get("cost_source"))
             g["input_tokens"] += s["input_tokens"]
             g["output_tokens"] += s["output_tokens"]
             g["costs"].append(s["cost_usd"])
         by_node = []
         for g in groups.values():
             costs = g.pop("costs")
-            by_node.append({**g, "cost_usd": sum_costs(costs)})
+            source = _combine_sources(g.pop("sources"))
+            by_node.append({**g, "cost_usd": sum_costs(costs), "cost_source": source})
         order = {n: i for i, n in enumerate(NODES)}
         by_node.sort(key=lambda g: (order.get(g["node"], len(order)), g["model"]))
         inp = sum(g["input_tokens"] for g in by_node)
         out = sum(g["output_tokens"] for g in by_node)
         return {"input_tokens": inp, "output_tokens": out, "total_tokens": inp + out,
-                "cost_usd": sum_costs(s["cost_usd"] for s in self.llm_spans()), "by_node": by_node}
+                "cost_usd": sum_costs(s["cost_usd"] for s in self.llm_spans()),
+                "cost_source": _combine_sources(s.get("cost_source") for s in self.llm_spans()), "by_node": by_node}
 
     def provider_errors(self) -> list[str]:
         return [s["error_type"] for s in self.llm_spans() if not s["ok"]]
