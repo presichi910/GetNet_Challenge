@@ -141,10 +141,10 @@ def get_llm(temperature: float = 0.0, model: str | None = None, max_tokens: int 
 def get_judge_llm(temperature: float = 0.0, max_tokens: int | None = 500, timeout: float = 60,
                   max_retries: int = 2) -> Any:
     """The eval judge, on JUDGE_PROVIDER (JUDGE_MODEL). On OpenRouter the judge runs with reasoning OFF, to behave as it did on Groq, where it
-    used a median of 92 output tokens per call (it did not reason). The model's default effort is the highest: in one measured pair of calls
-    (docs/evidence/openrouter_smoke_2026-11-19.json) it spent about 950 reasoning tokens and cost about 5 times more, with the same JSON.
-    It was NOT seen to truncate: at the pinned host the `max_completion_tokens` cap did not count the reasoning tokens (1070 returned
-    against a cap of 500)."""
+    used a median of 92 output tokens per call (it did not reason). The model's default effort is the highest: in two measured calls (the
+    second is docs/evidence/openrouter_smoke_2026-11-19.json) it spent 880 to 954 reasoning tokens and cost about 5 times more, with the same JSON.
+    It was NOT seen to truncate: at the pinned host the `max_completion_tokens` cap did not count the reasoning tokens (997 and 1070
+    completion tokens returned against a cap of 500)."""
     s = get_settings()
     provider = s.judge_provider.lower()
     if provider not in JUDGE_PROVIDERS:
