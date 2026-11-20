@@ -53,3 +53,49 @@ A call the pinned host cannot serve is an error that is counted, never silently 
 **Seed, written here before the final run: `20261123`** (the delivery date). The sample is drawn with `random.Random(20261123)`, stratified by group
 (regular, original holdout, holdout v3) over repetition 1 of the default arm, from case ids and their kind alone: it never reads a judge verdict, a
 score or a label.
+
+## Enmienda 1 (19-nov, antes de C1)
+
+Written and committed BEFORE any measurement it governs. It changes how the host of `openai/gpt-oss-120b` is chosen; it does not touch the judge's host
+(`alibaba`) nor any other rule above. The "Fixed hosts" row of the agents (`deepinfra`, `bf16`) holds until the rule below picks another host.
+
+**Reason: the latency of the first smoke on that host.** Run `eval/reports/20261119-212738.json` (versioned in `acb44f1`; commit `4e53782`, clean tree, 3 regular
+cases, no judge, 0 provider errors), against the five base repetitions of 2026-11-15 (`22423e2`, Fireworks):
+
+| case | smoke on `deepinfra/bf16` | base repetitions (5) | smoke / median of the base |
+|---|---|---|---|
+| `q01` total latency | 84,590 ms | 4,986 to 9,942 ms, median 5,862 | 14.4 times |
+| `q03` total latency | 23,246 ms | 3,247 to 5,632 ms, median 4,448 | 5.2 times |
+| `m01` total latency | 5,392 ms (2 calls, 93 output tokens: 2,696 ms per call) | 1,283 to 1,798 ms (642 to 899 ms per call) | 3.4 times |
+
+The work was the same: `q01` made 4 calls and 977 output tokens (base: 4 or 5 calls, 828 to 1,135 tokens), and its output rate was 11.5 tokens per second against 106 to 166
+in the base. What the file cannot say: it has no timing per node, and the retries of the HTTP client (2, after a 60 s timeout, a 429 or a 5xx) do not reach the callbacks, so a
+stall plus a retry may account for part of the 84.6 s of `q01` (`q03` and `m01` took under 60 s: a timeout cannot explain them, and a retry adds under a second). The measurement
+below makes one attempt per call, with no client retries, so that a slow host and a retried stall show up apart. One run of three cases is not a measure of the host: it is the reason
+to measure it.
+
+**Rule (written before the measurement, copied literally from the owner's decision of 2026-11-19):**
+
+> Candidatos: todos los hosts de openai/gpt-oss-120b en OpenRouter con cuantización bf16/fp16 o no declarada, que soporten tools y tengan uptime ≥ 99 %. Medición: 10 llamadas por host con un prompt de agente real (router y knowledge con tools) más q01 completo ×2. Se elige el host más barato cuyo p50 de latencia total esté dentro de 1.5× del más rápido y cuyas tools funcionen en el 100 % de las llamadas. Empate: el más rápido.
+
+**Definitions that make the rule executable** (added with the amendment, before the measurement; the rule above is not edited):
+
+1. **Candidates**: read at the start of the measurement from `GET /api/v1/models/openai/gpt-oss-120b/endpoints`, one candidate per endpoint tag. Quantization in `bf16`, `fp16` or
+   `unknown` (not declared); `tools` among its `supported_parameters`; `uptime_last_30m` of 99 or more (a missing value does not meet it).
+2. **The 10 calls per host**: 5 of the router and 5 of the knowledge agent, with the real `ROUTER_PROMPT` and `KNOWLEDGE_PROMPT` formatted as the nodes format them, one call for the
+   message of each regular case `q01`, `q03`, `q06`, `q09` and `q10` (no holdout case). The router call asks for its `RoutingDecision` by function calling, as the router does; the knowledge call
+   carries the three tool schemas of the agent (`search_getnet_kb`, `web_search`, `escalate_to_human`) with `tool_choice` auto, and the tools are not executed. The body is the one `app/llm.py`
+   builds (the same `extra_body`), with `provider.order` set to the candidate's tag and `allow_fallbacks` false.
+3. **Tools work** for a host if, in the 10 calls and in the `q01` runs, every call answers with the pinned host (the `provider` field of the response), no call errors or exceeds 120 s, every router
+   call returns a function call whose arguments parse as a `RoutingDecision`, every knowledge call returns a tool call whose name is one of the three and whose arguments are valid JSON, and both
+   `q01` runs end with the plan and the tool of the base (`knowledge`, `search_getnet_kb`).
+4. **`q01` complete, twice**: `python -m eval.run_eval --only q01 --repeats 2 --no-judge` with `OPENROUTER_PROVIDER_ORDER` pinning the candidate. Its two total latencies are reported; they are not
+   part of the p50.
+5. **Latency** is the wall-clock time of the whole request (not the time to the first token); the **p50** is over the host's 10 calls. **The fastest** is the lowest p50 among the hosts whose
+   tools work in 100 % of the calls (a fast host with broken tools does not set the bar).
+6. **Cost** is the mean real `usage.cost` per call over the 10 calls. **A tie** is two costs within 5 % of each other: the faster p50 wins.
+7. **One attempt per call**: the HTTP client makes no retries; a failure is data, and it counts against the host.
+8. **Cap**: US$0.10 for the whole measurement, by the real cost the responses report. Hosts are measured from the lowest listed price up; when the next host could exceed the cap the measurement stops
+   and the hosts left are listed as not measured.
+9. **Applied by code**: `eval/host_latency.py` applies the rule and writes `eval/reports/HOST-LATENCY-<stamp>.md` (generated) with the table of every host and the winner, whatever it says. If no host
+   meets the rule, `deepinfra/bf16` stays and the report says so. The default pinned host changes to the winner after the report, in its own commit.
