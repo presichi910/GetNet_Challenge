@@ -1,0 +1,261 @@
+{
+  "summary": {
+    "cases": 3,
+    "provider_errors": 0,
+    "routing_accuracy": 1.0,
+    "tool_use_accuracy": 1.0,
+    "degraded_rate": 0.0,
+    "latency_ms_p50": 3198,
+    "latency_ms_p95": 15339,
+    "handoff_accuracy": 1.0,
+    "handoff_rate": 0.0,
+    "memory_accuracy": 1.0,
+    "agent_tokens": 15831,
+    "judge_tokens": 0,
+    "agent_tokens_per_case_mean": 5277,
+    "agent_cost_usd": 0.0032205,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.0032205,
+    "tokens_by_model": [
+      {
+        "role": "agents",
+        "model": "openai/gpt-oss-120b",
+        "calls": 12,
+        "input_tokens": 13226,
+        "output_tokens": 2605,
+        "hosts": [
+          "Groq"
+        ],
+        "cost_usd": 0.0032205
+      }
+    ],
+    "commit": "8c20ab8994b9d4f15d38a20f898071663403ff5d",
+    "tree_clean": true,
+    "replan_max": 0,
+    "rag_mode": "dense",
+    "verifier_mode": "statements",
+    "approvals": "off (eval)",
+    "fallback_provider": "off (eval)",
+    "agent_provider": "openrouter",
+    "judge_provider": "openrouter",
+    "openrouter_provider_order": "openai/gpt-oss-120b=groq; qwen/qwen3.8-27b=alibaba",
+    "openrouter_allow_fallbacks": false,
+    "label": "openrouter smoke groq"
+  },
+  "rows": [
+    {
+      "id": "q01_compare_plans",
+      "message": "What's the difference between the Get Clássica and the Get Smart?",
+      "plan": [
+        "knowledge"
+      ],
+      "answer": "**Main difference**\n\n- **Get Classic** – Basic card reader, focused solely on payment capture (chip, magnetic stripe, contact‑less, Pix, QR Code). It works as a simple point‑of‑sale.\n\n- **Get Smart** – More advanced card reader, with integrated Android that allows inventory management, cash‑register closing and API integration. In addition to the same payment methods as the Classic, it offers sales‑control features and a more complete shopping experience.\n\n**Feature summary**\n\n| Feature | Get Classic | Get Smart |\n|---|---|---|\n| **Rental price** | R$ 79.90 /month | R$ 129.90 /month |\n| **Inventory / cash‑register management** | No | Yes (integrated) |\n| **Android system** | No | Yes |\n| **API integration** | No | Yes (for different types of business) |\n| **Connectivity** | Wi‑Fi, 4G (depending on the model) | Wi‑Fi, 4G, Bluetooth |\n| **Target audience** | Businesses that only need payment capture | Businesses that want to control sales, inventory and integrate systems |\n\nThere are no documented steps for this, and we are happy to help further.",
+      "tools_called": [
+        "search_getnet_kb"
+      ],
+      "evidence": [
+        "[search_getnet_kb] [1] (relevance=0.38) The perfect point of sale begins with our POS <https://www.getnet.net/en/our-solutions/in-person-payments>\nThe perfect point of sale begins with our POS\n\n## Get Classic\n\nThe basic POS for your sales.\n\n* All our terminals comply with PCI security standards to make your transactions secure\n* Get paid anywhere in your business in order to offer more comfort and a seanless experience\n* IIt's reliadble, intuitive and allows you to start selling fast.\n* Acceot chip card, magnetic stripe, contactless and mobiile payments\n\n## Get Smart\n\nThe POS to make your business grow.\n\n* From entering the stock to closing the cashier, everything is integrated.\n* Debit, credit card, vouchers, payment by approximation or via apps. The customer chooses the best way to pay.\n* Provide a new experience for your costumers with the Android system.\n* You can integrate the best API that fits your type of business\n\nGet Tap\n\n## Turn your smartphone into a tap-to-pay system\n\n### Fast & Easy\n\nAccept payments on your Android mobile or NFC-enabled tablet. No additional hardware or equipment required.\n\n[2] (relevance=0.37) Quer taxas menores para o seu CNPJ? <https://site.getnet.com.br/taxas-personalizadas-eye>\nQuer taxas menores para o seu CNPJ?\n\n### Escolha sua maquininha\n\nVocê tem  R$ de desconto  no **aluguel** de suas maquininhas.\n\nRecomendada\n\nGet Mini\n\nPara quem está começando\n\nR$29,90\n\np/mês\n\nGrátis\n\nGanhe o link Get Pay + WhatsApp Business gratuitamente\n\nWi-fi e chip com plano de dados gratuitos\n\nComprovante via SMS\n\nAproximação, Pix e QR Code\n\nquero a get mini   pedir com ajuda\n\nGet Clássica\n\nCom bobina e sustentável\n\nR$79,90\n\nComprovante impresso\n\nquero a get clássica   pedir com ajuda\n\nGet Smart+ Eye\n\nA mais moderna e completa\n\nR$129,90\n\nGestão de vendas e estoque\n\nHabilitada para contratação do Aplicativo Eye - R$49,90 mês\n\nquero a get smart + eye   pedir com ajuda\n\nfale no whatsapp   ou ligue 4002-4000\n\nJá sou cliente Getnet\n\nver taxas\n\n[3] (relevance=0.37) Com o Get Tap você prepara seu negócio para Black Friday <https://site.getnet.com.br/get-tap>\nCom o Get Tap você prepara seu negócio para Black Friday\n\n**Get Tap**\n Grátis\n\n**Link de Pagamento**\n\n**Get Mini**\nR$ 14,90/mês\n\n**Get Clássica**\n R$ 79,90/mês\n\n**Get Smart**\n R$ 129,90/mês\n\n[4] (relevance=0.36) wp content > uploads > 2025 > 09 > Manul GetSmart.pdf <https://site.getnet.com.br/wp-content/uploads/2025/09/Manul-GetSmart.pdf>\nwp content > uploads > 2025 > 09 > Manul GetSmart.pdf\n\nPrincipais características da Get Smart 1.\tSua maquininha é bivolt; 2.\tUse apenas o carregador original; 3.\tNão use nenhum tipo de produto de limpeza, apenas um pano seco e limpo; 4.\tEvite exposição prolongado à luz do sol; 5.\tNão molhar; 6.\tNão deixar cair; 7.\tO terminal só pode ser aberto por técnicos autorizados.\nCuidados Pagamento por aproximação Bluetooth Sinal 4G Wi-fi Bateria Fim » › › Manual Get Smart 4 Índice « Configurações da Get Smart 02 Configurações da Get Smart Sua Get Smart oferece diversas opções de configuração diretamente na própria maquininha. Para acessá-las, basta tocar em “Configurar” na tela inicial. Confira abaixo as funcionalidades disponíveis: Wi-Fi ■Visualize as redes disponíveis e conecte-se facilmente a uma rede Wi-Fi.\nSistema ■Consulte informações sobre o Auttar (disponível apenas para maquininhas com TEF). ■Restaure o sistema (função restrita ao suporte técnico, com senha de acesso).\n\n[5] (relevance=0.36) wp content > uploads > 2025 > 09 > Manul GetSmart.pdf <https://site.getnet.com.br/wp-content/uploads/2025/09/Manul-GetSmart.pdf>\nwp content > uploads > 2025 > 09 > Manul GetSmart.pdf\n\nÚltima atualização: Junho/2025.\nManual Get Smart Manual Get Smart 2 Índice Índice Como fazer o fechamento de vendas 09 Como fazer a antecipação de vendas 08 Get Ajuda 11 Como reimprimir o comprovante de venda 06 Como fazer um estorno 05 Como fazer uma venda 04 Formas de pagamento 03 Configurações da Get Smart 02 Principais informações 01 Como conferir suas últimas vendas 07 Dicas de segurança 10 Fim » › › Índice « Manual Get Smart 3 Índice « Principais informações 01 Principais informações O que vem na caixa O que significa cada ícone Get Smart Maquininha de cartão Getnet Carregador Carregador bivolt original da maquininha Chip 4G Com plano de dados gratuitos ■Tela touchscreen; ■Leitor de chip; ■Leitor de terja magnética; ■Leitor integrado sem-contato (NFC); ■Comunicação 4G, Wi-Fi e Bluetooth."
+      ],
+      "verify_note": "revised:1 [Get Clássica oferece comprovante impresso]; translated:pt->en",
+      "verify_raw": "{\"statements\": [{\"statement\": \"Preço de aluguel da Get Clássica é R$ 79,90 /mês\", \"evidence_quote\": \"Get Clássica\\n\\nCom bobina e sustentável\\n\\nR$79,90\", \"quote_found\": true}, {\"statement\": \"Preço de aluguel da Get Smart é R$ 129,90 /mês\", \"evidence_quote\": \"Get Smart+ Eye\\n\\nA mais moderna e completa\\n\\nR$129,90\", \"quote_found\": true}, {\"statement\": \"Get Clássica oferece comprovante impresso\", \"evidence_quote\": \"Get Clássica\\n\\nComprovante impresso\", \"quote_found\": false}, {\"statement\": \"Get Smart oferece gestão de vendas e estoque\", \"evidence_quote\": \"Gestão de vendas e estoque\", \"quote_found\": true}, {\"statement\": \"Get Smart possui sistema Android integrado\", \"evidence_quote\": \"Provide a new experience for your costumers with the Android system.\", \"quote_found\": true}, {\"statement\": \"Get Smart permite integração via API\", \"evidence_quote\": \"You can integrate the best API that fits your type of business\", \"quote_found\": true}, {\"statement\": \"Get Smart tem conectividade Wi‑Fi, 4G e Bluetooth\", \"evidence_quote\": \"Wi‑Fi ■Visualize as redes disponíveis e conecte-se facilmente a uma rede Wi‑Fi.\\nSistema ■Consulte informações ...\\nBluetooth\", \"quote_found\": true}]}",
+      "tool_calls": [
+        {
+          "agent": "knowledge",
+          "name": "search_getnet_kb",
+          "args": {
+            "query": "Get Clássica Get Smart diferença"
+          }
+        }
+      ],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 15339,
+      "handoff": null,
+      "handoff_ok": true,
+      "usage": {
+        "input_tokens": 7046,
+        "output_tokens": 1720,
+        "total_tokens": 8766,
+        "cost_usd": 0.0019161,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 1,
+            "latency_ms": 922,
+            "input_tokens": 1083,
+            "output_tokens": 63,
+            "cost_usd": 0.00020025,
+            "cost_source": "provider"
+          },
+          {
+            "node": "knowledge",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 2,
+            "latency_ms": 1640,
+            "input_tokens": 3063,
+            "output_tokens": 429,
+            "cost_usd": 0.00054405,
+            "cost_source": "provider"
+          },
+          {
+            "node": "verify",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 3,
+            "latency_ms": 3570,
+            "input_tokens": 2900,
+            "output_tokens": 1228,
+            "cost_usd": 0.0011718,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    },
+    {
+      "id": "q03_payout_timing",
+      "message": "When will the money from yesterday's sales be deposited?",
+      "plan": [
+        "support"
+      ],
+      "answer": "The payouts for yesterday’s sales are:\n\n- **Debit + Pix sales (R$ 352.00 gross, R$ 3.10 fees)** – net R$ 348.90, scheduled to be deposited on **20 Nov 2026** (1 day from the sales date).  \n- **Credit‑card sales – 1st installment (R$ 233.25 gross, R$ 8.40 fees)** – net R$ 224.85, scheduled to be deposited on **19 Dec 2026** (30 days from the sales date).\n\nIf you need anything else, just let me know!",
+      "tools_called": [
+        "get_payout_schedule"
+      ],
+      "evidence": [
+        "[get_payout_schedule] [{\"reference\":\"Sales of yesterday (debit + Pix)\",\"gross\":352.0,\"fees\":3.1,\"net\":348.9,\"status\":\"scheduled\",\"sales_date\":\"2026-11-18\",\"expected_date\":\"2026-11-20\",\"days_until_deposit\":1},{\"reference\":\"Sales of yesterday (credit, 1st installment)\",\"gross\":233.25,\"fees\":8.4,\"net\":224.85,\"status\":\"scheduled\",\"sales_date\":\"2026-11-18\",\"expected_date\":\"2026-12-19\",\"days_until_deposit\":30},{\"reference\":\"Sales of 2 days ago (debit + Pix)\",\"gross\":596.3,\"fees\":5.2,\"net\":591.1,\"status\":\"processing\",\"sales_date\":\"2026-11-17\",\"expected_date\":\"2026-11-19\",\"days_until_deposit\":0},{\"reference\":\"Sales of 3 days ago\",\"gross\":515.8,\"fees\":0.0,\"net\":515.8,\"status\":\"paid\",\"sales_date\":\"2026-11-16\",\"expected_date\":\"2026-11-18\",\"days_until_deposit\":-1}]"
+      ],
+      "verify_note": "",
+      "verify_raw": "{\"statements\": [{\"statement\": \"Debit + Pix sales are scheduled to be deposited on 20 Nov 2026\", \"evidence_quote\": \"\\\"expected_date\\\":\\\"2026-11-20\\\"\", \"quote_found\": true}, {\"statement\": \"Credit‑card 1st installment sales are scheduled to be deposited on 19 Dec 2026\", \"evidence_quote\": \"\\\"expected_date\\\":\\\"2026-12-19\\\"\", \"quote_found\": true}, {\"statement\": \"Debit + Pix net amount is R$ 348.90\", \"evidence_quote\": \"\\\"net\\\":348.9\", \"quote_found\": true}, {\"statement\": \"Credit‑card 1st installment net amount is R$ 224.85\", \"evidence_quote\": \"\\\"net\\\":224.85\", \"quote_found\": true}, {\"statement\": \"Debit + Pix gross amount is R$ 352.00\", \"evidence_quote\": \"\\\"gross\\\":352.0\", \"quote_found\": true}, {\"statement\": \"Debit + Pix fees are R$ 3.10\", \"evidence_quote\": \"\\\"fees\\\":3.1\", \"quote_found\": true}, {\"statement\": \"Credit‑card 1st installment gross amount is R$ 233.25\", \"evidence_quote\": \"\\\"gross\\\":233.25\", \"quote_found\": true}, {\"statement\": \"Credit‑card 1st installment fees are R$ 8.40\", \"evidence_quote\": \"\\\"fees\\\":8.4\", \"quote_found\": true}]}",
+      "tool_calls": [
+        {
+          "agent": "support",
+          "name": "get_payout_schedule",
+          "args": {}
+        }
+      ],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 3198,
+      "handoff": null,
+      "handoff_ok": true,
+      "usage": {
+        "input_tokens": 4788,
+        "output_tokens": 781,
+        "total_tokens": 5569,
+        "cost_usd": 0.00111,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 1,
+            "latency_ms": 467,
+            "input_tokens": 1080,
+            "output_tokens": 70,
+            "cost_usd": 0.0001272,
+            "cost_source": "provider"
+          },
+          {
+            "node": "support",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 2,
+            "latency_ms": 1039,
+            "input_tokens": 2943,
+            "output_tokens": 177,
+            "cost_usd": 0.00054765,
+            "cost_source": "provider"
+          },
+          {
+            "node": "verify",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 1,
+            "latency_ms": 1540,
+            "input_tokens": 765,
+            "output_tokens": 534,
+            "cost_usd": 0.00043515,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m01_recall_color",
+      "message": "What favorite color did I tell you?",
+      "plan": [],
+      "answer": "You mentioned that your favorite color is green.",
+      "tools_called": [],
+      "evidence": [],
+      "verify_note": "",
+      "verify_raw": "",
+      "tool_calls": [],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 1098,
+      "handoff": null,
+      "handoff_ok": true,
+      "history": [
+        {
+          "role": "user",
+          "content": "My favorite color is green, please remember it."
+        },
+        {
+          "role": "assistant",
+          "content": "Got it, your favorite color is green."
+        }
+      ],
+      "memory": {
+        "restart": true,
+        "seeded": 2,
+        "restored": 2,
+        "restored_intact": true,
+        "after": 4,
+        "answered_in_thread": true
+      },
+      "memory_ok": true,
+      "usage": {
+        "input_tokens": 1392,
+        "output_tokens": 104,
+        "total_tokens": 1496,
+        "cost_usd": 0.0001944,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 1,
+            "latency_ms": 641,
+            "input_tokens": 1106,
+            "output_tokens": 69,
+            "cost_usd": 0.0001305,
+            "cost_source": "provider"
+          },
+          {
+            "node": "synthesizer",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 1,
+            "latency_ms": 394,
+            "input_tokens": 286,
+            "output_tokens": 35,
+            "cost_usd": 6.39e-05,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    }
+  ]
+}
