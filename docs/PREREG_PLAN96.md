@@ -116,3 +116,13 @@ real cost US$0.0211 of the US$0.10 cap). **The host of `openai/gpt-oss-120b` is 
 ("Filter by Tool Compatibility"), so their tools do not work. The reference `deepinfra/bf16` (not a candidate that day: 90 % uptime) had a p50 of 5,973 ms with one attempt per call and no client retries.
 This result replaces the `deepinfra`, `bf16` row of "Fixed hosts" for the agents; the judge row stays. The default of `OPENROUTER_PROVIDER_ORDER` was changed to `groq` in its own commit.
 
+### Enmienda 1b (19-nov): the measurement is repeated before the freeze
+
+> El sábado antes del congelado se repite la medición de hosts con la misma regla. Si Groq no la pasa, se fija el siguiente host del ranking que sí la pase.
+
+How this is read (written now, before the repetition): the same harness, rule, definitions and cap of amendment 1 and 1a, run on Saturday before the freeze of the evaluation commit. **Groq stays
+pinned if it passes** the rule: it is a candidate that day (quantization, tools and uptime of the filter), its tools work in all 10 calls and both `q01` runs, and its p50 is within 1.5 times the
+fastest. **If it does not pass**, the host pinned is the first of the ranking that does: the ranking is the rule's own order among the hosts that pass (the cheapest by real cost per call, a tie within 5 %
+to the faster). A host that passes and is cheaper than Groq that day does not displace it: the amendment replaces a host that fails, it does not re-run the choice. The harness will get an `--incumbent` option for
+this before Saturday's run; until then it reports its unconditional winner, as it did on the 19th.
+
