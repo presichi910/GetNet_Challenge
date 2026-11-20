@@ -68,10 +68,12 @@ def annotate(pooled: dict, rows: list[dict]) -> dict:
 def rows_table(pooled: dict, seen: dict | None = None, case_counts: dict[str, int] | None = None) -> list[str]:
     groups = pooled.get("holdout_groups") or {}
     n = case_counts or {}
-    label = {"original": "holdout, original", "blind": "holdout, new, not targeted"}
+    label = {"original": "holdout, original", "blind": "holdout, new, not targeted", "v3": "holdout v3"}
     assert set(label) == set(HOLDOUT_GROUPS)
     cols = [("regular", pooled)]
     for g in HOLDOUT_GROUPS:
+        if g == "v3" and not groups.get(g):
+            continue  # its own column only when the run has hv3 cases: without them the table is what it always was
         cols.append((label[g] + (f" ({n[g]} cases)" if n.get(g) else ""), groups.get(g)))
     cols.append(("holdout, baseline seen" + (f" ({n['seen']} cases)" if n.get("seen") else ""), seen))
     out = ["| | " + " | ".join(name for name, _ in cols) + " |", "|---|" + "---|" * len(cols)]

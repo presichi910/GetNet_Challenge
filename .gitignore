@@ -26,3 +26,4 @@ GETNET_MEJORAS_Y_RUBRICA.md
 data/rag_cache.sqlite*
 data/approvals.sqlite*
 infra/observability/metrics_token
+eval/holdout_v3_draft.txt

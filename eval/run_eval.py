@@ -58,11 +58,22 @@ def should_update_latest(only: list[str] | None, keep_latest: bool, label: str |
     return not only and not keep_latest and not label and custom_dataset() is None
 
 
+HOLDOUT_V3 = ROOT / "holdout_v3.jsonl"
+
+
+def with_holdout_v3() -> bool:
+    """True when EVAL_WITH_HOLDOUT_V3 is set (--with-holdout-v3 sets it; eval/rejudge.py reads the cases through `load_cases`, so it sees the same set).
+    The v3 cases are appended after the dataset's; unset (the default) nothing changes."""
+    return os.environ.get("EVAL_WITH_HOLDOUT_V3", "").strip().lower() in ("1", "true", "yes")
+
+
 def load_cases(only: list[str] | None, regular_only: bool = False) -> list[dict]:
     path = dataset_path()
     if not path.exists():
         raise SystemExit(f"run_eval: the cases file {path} does not exist (EVAL_DATASET={os.environ.get('EVAL_DATASET', '')!r})")
     cases = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if with_holdout_v3():
+        cases += [json.loads(line) for line in HOLDOUT_V3.read_text(encoding="utf-8").splitlines() if line.strip()]
     return [c for c in cases if (not only or any(c["id"].startswith(p) for p in only)) and not (regular_only and c.get("holdout"))]
 
 
@@ -163,14 +174,17 @@ def split_holdout(rows: list[dict]) -> tuple[list[dict], list[dict]]:
 
 HOLDOUT_ORIGINAL_LAST = 5  # ho01-ho05 were seen during development; ho06 and later are the new holdout (ho06, ho08 and ho12 are baseline seen)
 HOLDOUT_GROUPS = {"original": "original (ho01-ho05), seen during development",
-                  "blind": "new (ho06 and later; ho06, ho08 and ho12 are baseline seen)"}
+                  "blind": "new (ho06 and later; ho06, ho08 and ho12 are baseline seen)",
+                  "v3": "v3 (hv3_01-hv3_20; written and committed before any plan 9.6 behavior change)"}
 # What the per-case marks say. The key "blind" is the historical name of the new holdout group: saved summaries and the final report read it, so only the text changed.
-HOLDOUT_MARK = {"original": "original", "blind": "new"}
+HOLDOUT_MARK = {"original": "original", "blind": "new", "v3": "v3"}
 
 
 def holdout_group(case_id: str) -> str:
     """The group "blind" (the new holdout, historical key) only for ids ho06 and later; every other holdout id counts as "original" (the new
     group is never assumed). Derived from the id, so no case in the dataset has to change."""
+    if case_id.startswith("hv3_"):
+        return "v3"
     m = re.match(r"ho(\d+)", case_id)
     return "blind" if m and int(m.group(1)) > HOLDOUT_ORIGINAL_LAST else "original"
 
@@ -517,6 +531,8 @@ def run_config(label: str | None = None) -> dict:
            "replan_max": s.replan_max, "rag_mode": s.rag_mode, "verifier_mode": s.verifier_mode, "approvals": "off (eval)", "fallback_provider": "off (eval)"}
     if label:
         cfg["label"] = label
+    if with_holdout_v3():
+        cfg["with_holdout_v3"] = True  # only when set, like `dataset`
     if custom_dataset() is not None:  # only when it is not the default, so the report of a normal run is what it always was
         cfg["dataset"] = custom_dataset().name  # type: ignore[union-attr]
     return cfg
@@ -561,6 +577,8 @@ def main() -> None:
                     help="refuse to run unless the code is committed and the tree is clean: the reports cite the commit they came from")
     ap.add_argument("--dataset", default=None, metavar="PATH",
                     help="run another cases file with the same schema (sets EVAL_DATASET, which eval/rejudge.py also reads); latest.md is never replaced by such a run")
+    ap.add_argument("--with-holdout-v3", action="store_true",
+                    help="run eval/holdout_v3.jsonl (hv3_*) together with the dataset; its metrics stay in their own holdout group (sets EVAL_WITH_HOLDOUT_V3, which eval/rejudge.py also reads)")
     ap.add_argument("--inject-history", action="store_true",
                     help="the old way: earlier turns of a multi-turn case go in as context (no checkpointer, no restart)")
     args = ap.parse_args()
@@ -575,6 +593,8 @@ def main() -> None:
         print(f"NOTE: FALLBACK_PROVIDER={get_settings().fallback_provider} is set; the eval turns provider failover off for this run.")
         os.environ["FALLBACK_PROVIDER"] = ""
         get_settings.cache_clear()
+    if args.with_holdout_v3:
+        os.environ["EVAL_WITH_HOLDOUT_V3"] = "1"
     if args.dataset:
         os.environ["EVAL_DATASET"] = str(Path(args.dataset).resolve())
     if args.require_clean:

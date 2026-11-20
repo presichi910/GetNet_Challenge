@@ -101,3 +101,23 @@ def test_rejudge_judges_probe_rows_with_their_own_criteria_when_the_variable_is_
     assert score_file(str(path), sc, {c["id"]: c for c in load_cases(None)}, print_fn=said.append) == "done"
     assert not any("not in the dataset" in s for s in said) and judge.seen == [c["criteria"] for c in probe[:3]]
     assert [(r["judge"] or {}).get("verdict") for r in load_rows(path)[1]] == ["pass"] * 3
+
+
+def test_with_holdout_v3_appends_its_cases_in_their_own_group_and_default_is_unchanged(monkeypatch):
+    from eval.run_eval import HOLDOUT_V3, holdout_group, summarize_all, with_holdout_v3
+
+    base = lines(ROOT / "dataset.jsonl")
+    monkeypatch.delenv("EVAL_WITH_HOLDOUT_V3", raising=False)
+    assert not with_holdout_v3() and load_cases(None) == base and "with_holdout_v3" not in run_config()
+    monkeypatch.setenv("EVAL_WITH_HOLDOUT_V3", "1")
+    v3 = lines(HOLDOUT_V3)
+    assert load_cases(None) == base + v3 and len(v3) == 20
+    assert load_cases(None, regular_only=True) == [c for c in base if not c.get("holdout")]  # the v3 cases are holdout: --regular-only leaves them out
+    assert load_cases(["hv3_0"]) == [c for c in v3 if c["id"].startswith("hv3_0")]
+    assert {holdout_group(c["id"]) for c in v3} == {"v3"} and holdout_group("ho07_x") == "blind" and holdout_group("ho01_x") == "original"
+    assert run_config()["with_holdout_v3"] is True
+    base_row = {"routing_ok": True, "tools_ok": True, "latency_ms": 1000, "degraded": False}
+    rows = [{**base_row, "id": "q01"}, {**base_row, "id": "hv3_01", "holdout": True, "routing_ok": False},
+            {**base_row, "id": "ho07", "holdout": True}]
+    groups = summarize_all(rows)["holdout_groups"]
+    assert set(groups) == {"blind", "v3"} and groups["v3"]["cases"] == 1 and groups["v3"]["routing_accuracy"] == 0.0

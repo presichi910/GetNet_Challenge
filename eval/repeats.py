@@ -85,6 +85,8 @@ def aggregate(runs: list[list[dict]], summaries: list[dict]) -> dict:
                                         if s.get("holdout_groups", {}).get("original")]),
             "holdout_blind": spread([s["holdout_groups"]["blind"] for s in summaries
                                      if s.get("holdout_groups", {}).get("blind")]),
+            "holdout_v3": spread([s["holdout_groups"]["v3"] for s in summaries
+                                  if s.get("holdout_groups", {}).get("v3")]),
             "cases": cases, "unstable": unstable, "always_fail": always_fail,
             "provider_errors": sum(s.get("provider_errors", 0) for s in summaries),
             "judge_errors": sum(v["judge_errors"] for v in cases.values()),
@@ -120,8 +122,9 @@ def render(agg: dict, stamp: str, models: dict | None = None, sources: list[str]
               "is left out of passed / ran: not a pass, not a fail).", ""]
     sections = [("Regular cases", "regular"),
                 ("Holdout - original (ho01-ho05), seen during development", "holdout_original"),
-                ("Holdout - new (ho06 and later; ho06, ho08 and ho12 are baseline seen)", "holdout_blind")]
-    if not (agg.get("holdout_original") or agg.get("holdout_blind")):
+                ("Holdout - new (ho06 and later; ho06, ho08 and ho12 are baseline seen)", "holdout_blind"),
+                ("Holdout v3 (hv3_01-hv3_20)", "holdout_v3")]
+    if not (agg.get("holdout_original") or agg.get("holdout_blind") or agg.get("holdout_v3")):
         sections.append(("Holdout cases", "holdout"))  # summaries without groups
     for title, key in sections:
         if not agg.get(key):
