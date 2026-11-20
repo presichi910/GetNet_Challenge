@@ -160,6 +160,12 @@ Run on the experimental branch `exp/b-plus`; `app/` is identical to `98ea315` (t
 
 **The redaction of the traces**, and the check on each file (`grep -c`, case-insensitive, on `docs/evidence/jaeger_trace_2026-11-18.json` and on `docs/evidence/jaeger_trace_tools_2026-11-18.json`): absolute timestamps were replaced by offsets from the start of the turn and the process tag `service.instance.id` was replaced by `<redacted>`. Matches: `Bearer` 0, `eyJ` 0, `Authorization` 0, `api_key`/`apikey`/`api-key` 0, e-mail addresses 0, numbers of 10 digits or more 0, a customer id (`cliente<N>`) 0, the text of the message 0, the conversation id 0, the generated passwords and token 0, key prefixes (`gsk_`, `fw_`, `sk-`, `pa-`, `tvly-`) 0, in both files; the second file also: the text of the question 0, the text of the answer (the amount and `R$`) 0. The first grep of the second file found 3 numbers of 10 digits or more: they were floating-point noise in `getnet.cost_usd` (for example 0.0029363999999999996), not data. The script was then changed to round float tags to 8 decimals (declared in the file's own `_capture` note), the redaction was run again on the same raw export and every count was 0 before the file was saved.
 
+## Captured on 2026-11-19
+
+| File | Date | Exact command | What it shows | What it does not show |
+|---|---|---|---|---|
+| `docs/evidence/openrouter_models_2026-11-19.json` | 2026-11-19 (02:59 UTC of the 20th, as the file says) | `python -m scripts.openrouter_models` (public endpoints, no key) | what OpenRouter listed for the seven models of plan 9.6: price, parameters, reasoning options, and for `openai/gpt-oss-120b` and `qwen/qwen3.8-27b` every host with its quantization, price and uptime. The two hosts the code pins (`deepinfra/bf16` and `alibaba`) and the prices in `app/observability.py` (`DEFAULT_PRICES`, the `<model>@<host>` entries) come from it | any call to any model; it is a snapshot, and prices and uptime move (a model's listed price is the cheapest host's, not the pinned host's: for the judge model 0.06/2.2 listed against 0.425/2.55 at `alibaba`, USD per million tokens) |
+
 ## Reported by the owner (not verifiable from the checkout)
 
 These are results of runs on GitHub. The repository cannot show them: a checkout has no access to the run, and the tests only check that the workflow keeps its gates (`tests/test_ci_gates.py`). The link was pasted by the owner; it is the owner's account of that run, and **this page claims nothing about it beyond the link**.
