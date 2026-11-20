@@ -127,6 +127,20 @@ def _provider_cost(response) -> float | None:
     return None
 
 
+def _host_of(response) -> str | None:
+    """The host that answered, as OpenRouter names it (app/llm.py keeps it in `llm_output["host"]`), or None for a provider that does not say."""
+    candidates = [getattr(response, "llm_output", None) or {}]
+    try:
+        candidates.append(response.generations[0][0].message.response_metadata or {})
+    except (AttributeError, IndexError):
+        pass
+    for source in candidates:
+        host = source.get("host") if isinstance(source, dict) else None
+        if isinstance(host, str) and host:
+            return host
+    return None
+
+
 def _combine_sources(sources) -> str | None:
     """"provider" (every cost is what the provider reported), "estimated" (list prices, or no price at all) or "mixed"; None without calls."""
     found = {s for s in sources if s}
@@ -172,6 +186,7 @@ class TurnCollector(BaseCallbackHandler):
         if span is None:
             return
         span["input_tokens"], span["output_tokens"] = _usage_of(response)
+        span["host"] = _host_of(response)
         real = _provider_cost(response)
         if real is not None:  # what the provider charged for THIS call beats any price table
             span["cost_usd"], span["cost_source"] = real, "provider"
@@ -220,11 +235,12 @@ class TurnCollector(BaseCallbackHandler):
 
     def usage(self) -> dict:
         """{input_tokens, output_tokens, total_tokens, cost_usd, by_node: [{node, model, calls, ...}]}."""
-        groups: dict[tuple[str, str], dict] = {}
+        groups: dict[tuple[str, str, str | None], dict] = {}
         for s in self.llm_spans():
-            g = groups.setdefault((s["node"], s["name"]), {"node": s["node"], "model": s["name"], "calls": 0,
-                                                             "input_tokens": 0, "output_tokens": 0, "costs": [], "sources": []})
+            g = groups.setdefault((s["node"], s["name"], s.get("host")), {"node": s["node"], "model": s["name"], "host": s.get("host"), "calls": 0,
+                                                                          "latency_ms": 0, "input_tokens": 0, "output_tokens": 0, "costs": [], "sources": []})
             g["calls"] += 1
+            g["latency_ms"] += s.get("latency_ms", 0)
             g["sources"].append(s.get("cost_source"))
             g["input_tokens"] += s["input_tokens"]
             g["output_tokens"] += s["output_tokens"]
@@ -235,7 +251,7 @@ class TurnCollector(BaseCallbackHandler):
             source = _combine_sources(g.pop("sources"))
             by_node.append({**g, "cost_usd": sum_costs(costs), "cost_source": source})
         order = {n: i for i, n in enumerate(NODES)}
-        by_node.sort(key=lambda g: (order.get(g["node"], len(order)), g["model"]))
+        by_node.sort(key=lambda g: (order.get(g["node"], len(order)), g["model"], g["host"] or ""))
         inp = sum(g["input_tokens"] for g in by_node)
         out = sum(g["output_tokens"] for g in by_node)
         return {"input_tokens": inp, "output_tokens": out, "total_tokens": inp + out,

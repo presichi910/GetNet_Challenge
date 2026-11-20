@@ -50,7 +50,8 @@ def test_a_variable_that_points_nowhere_stops_the_run_it_does_not_fall_back_to_t
 
 
 def test_the_run_config_of_a_normal_run_has_the_keys_it_always_had_and_the_dataset_only_when_it_is_not_the_default(monkeypatch):
-    base = {"commit", "tree_clean", "replan_max", "rag_mode", "verifier_mode", "approvals", "fallback_provider"}
+    base = {"commit", "tree_clean", "replan_max", "rag_mode", "verifier_mode", "approvals", "fallback_provider",
+            "agent_provider", "judge_provider", "openrouter_provider_order", "openrouter_allow_fallbacks"}
     assert set(run_config()) == base and set(run_config("replan on")) == base | {"label"}
     monkeypatch.setenv("EVAL_DATASET", str(PROBE))
     assert run_config()["dataset"] == "replan_probe.jsonl" and set(run_config()) == base | {"dataset"}

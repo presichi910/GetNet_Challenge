@@ -389,7 +389,9 @@ def usage_summary(rows: list[dict]) -> dict:
     for role, groups in (("agents", agents), ("judge", judges)):
         for g in groups:
             m = by_model.setdefault((role, g["model"]), {"role": role, "model": g["model"], "calls": 0,
-                                                         "input_tokens": 0, "output_tokens": 0, "costs": []})
+                                                         "input_tokens": 0, "output_tokens": 0, "costs": [], "hosts": set()})
+            if g.get("host"):
+                m["hosts"].add(g["host"])  # the host that ANSWERED (OpenRouter's `provider` field), not the one that was asked for
             m["calls"] += g["calls"]
             m["input_tokens"] += g["input_tokens"]
             m["output_tokens"] += g["output_tokens"]
@@ -397,7 +399,7 @@ def usage_summary(rows: list[dict]) -> dict:
     models = []
     for m in by_model.values():
         costs = m.pop("costs")
-        models.append({**m, "cost_usd": sum_costs(costs)})
+        models.append({**m, "hosts": sorted(m["hosts"]), "cost_usd": sum_costs(costs)})
     agent_cost = sum_costs(m["cost_usd"] for m in models if m["role"] == "agents")
     judge_cost = sum_costs(m["cost_usd"] for m in models if m["role"] == "judge")
     case_tokens = [r["usage"]["total_tokens"] for r in rows if r.get("usage")]
@@ -478,10 +480,10 @@ def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | No
         lines += ["", "## Tokens and estimated cost per model", "",
                   f"_Prices: app/observability.py (USD per 1M tokens, list prices of {PRICES_AS_OF}); "
                   "a model without a price shows `n/a`, not 0._", "",
-                  "| role | model | calls | input | output | cost USD |", "|---|---|---|---|---|---|"]
+                  "| role | model | calls | input | output | cost USD | hosts that answered |", "|---|---|---|---|---|---|---|"]
         for m in summary["tokens_by_model"]:
             lines.append(f"| {m['role']} | `{m['model']}` | {m['calls']} | {m['input_tokens']} | {m['output_tokens']} "
-                         f"| {_usd(m['cost_usd'])} |")
+                         f"| {_usd(m['cost_usd'])} | {', '.join(m.get('hosts') or []) or '-'} |")
     lines += ["", "## Cases", "", "_tokens / cost: the agents of the case (the judge is apart, above)._", "",
               "| id | route | tools | handoff | rel | grounded | compl | tone | verdict | ms | tokens | cost USD |",
               "|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -532,7 +534,11 @@ def run_config(label: str | None = None) -> dict:
 
     git = repo_state()
     cfg = {"commit": git["commit"], "tree_clean": git["tree_clean"],
-           "replan_max": s.replan_max, "rag_mode": s.rag_mode, "verifier_mode": s.verifier_mode, "approvals": "off (eval)", "fallback_provider": "off (eval)"}
+           "replan_max": s.replan_max, "rag_mode": s.rag_mode, "verifier_mode": s.verifier_mode, "approvals": "off (eval)", "fallback_provider": "off (eval)",
+           # what was ASKED for (the pins). What answered is in tokens_by_model[].hosts, from each response
+           "agent_provider": s.agent_provider, "judge_provider": s.judge_provider,
+           "openrouter_provider_order": "; ".join(f"{m}={','.join(h)}" for m, h in sorted(s.openrouter_provider_order.items())),
+           "openrouter_allow_fallbacks": s.openrouter_allow_fallbacks}
     if label:
         cfg["label"] = label
     if with_holdout_v3():

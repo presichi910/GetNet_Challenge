@@ -10,6 +10,7 @@ The agents (router, knowledge, support, synthesizer, summarizer) use AGENT_PROVI
 The eval judge (`get_judge_llm`) uses JUDGE_PROVIDER (`openrouter` by default, or `groq`), whatever AGENT_PROVIDER says,
 and its model family is never the agents' (a test fails if an agent model id is a Qwen).
 """
+import functools
 import logging
 from typing import Any
 
@@ -70,10 +71,27 @@ def openrouter_model_name(name: str) -> str:
     return name
 
 
-def _openrouter(name: str, temperature: float, max_tokens: int | None, timeout: float, max_retries: int,
-                reasoning_effort: str | None = None):
+@functools.lru_cache(maxsize=1)
+def _openrouter_chat_class():
+    """ChatOpenAI that keeps the one field OpenRouter adds to a response and langchain drops: `provider`, the host that answered.
+    It is put in `llm_output["host"]` and in each message's `response_metadata["host"]`, where the TurnCollector reads it."""
     from langchain_openai import ChatOpenAI  # only needed with an OpenRouter model
 
+    class OpenRouterChat(ChatOpenAI):
+        def _create_chat_result(self, response: Any, generation_info: dict | None = None):
+            result = super()._create_chat_result(response, generation_info)
+            host = response.get("provider") if isinstance(response, dict) else getattr(response, "provider", None)
+            if isinstance(host, str) and host:
+                result.llm_output = {**(result.llm_output or {}), "host": host}
+                for generation in result.generations:
+                    generation.message.response_metadata["host"] = host  # type: ignore[attr-defined]
+            return result
+
+    return OpenRouterChat
+
+
+def _openrouter(name: str, temperature: float, max_tokens: int | None, timeout: float, max_retries: int,
+                reasoning_effort: str | None = None):
     s = get_settings()
     model = openrouter_model_name(name)
     order = s.openrouter_provider_order.get(model) or []
@@ -89,7 +107,7 @@ def _openrouter(name: str, temperature: float, max_tokens: int | None, timeout: 
     # the host that is paid for: the estimate of a call that comes back without a cost (app/observability.py) must use ITS price,
     # not the list price of the model (which is the cheapest host's, or another provider's)
     price_key = f"{model}@{order[0]}" if order else f"{model}@openrouter"
-    return ChatOpenAI(model=model, temperature=temperature, api_key=s.openrouter_api_key or "missing-openrouter-key",  # type: ignore[arg-type,call-arg]
+    return _openrouter_chat_class()(model=model, temperature=temperature, api_key=s.openrouter_api_key or "missing-openrouter-key",  # type: ignore[arg-type,call-arg]
                       base_url=OPENROUTER_BASE_URL, max_retries=max_retries, timeout=timeout, max_tokens=max_tokens,
                       extra_body=extra_body, stream_usage=True, metadata={"price_key": price_key})
 
