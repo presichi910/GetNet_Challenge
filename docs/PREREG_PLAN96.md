@@ -126,3 +126,16 @@ fastest. **If it does not pass**, the host pinned is the first of the ranking th
 to the faster). A host that passes and is cheaper than Groq that day does not displace it: the amendment replaces a host that fails, it does not re-run the choice. The harness will get an `--incumbent` option for
 this before Saturday's run; until then it reports its unconditional winner, as it did on the 19th.
 
+#### 1b, aclaración, 19-nov 23:05, antes de cualquier medición del sábado
+
+The owner confirmed the reading of amendment 1b written above, and this note fixes it so that it cannot be read otherwise later:
+
+- **Groq stays pinned if it passes the rule. Another host replaces it only if Groq fails it.** "Fails" is: not a candidate that day (quantization, tools or uptime of the filter), not measured, tools not working
+  in all 10 calls and both `q01` runs, or a p50 above 1.5 times the fastest of the hosts that pass. A host that passes and is cheaper, or faster, than Groq that day does **not** displace it.
+- **Reason: C1 and C3 have to run on the same host to be comparable.** The model comparison (C1) and the final run (C3) are only comparable if the host of `openai/gpt-oss-120b` does not move between them; a
+  host chosen again on every measurement would move it whenever another one is a little cheaper that day. The measurement of Saturday exists to catch a host that has become unusable, not to pick the best one again.
+- **If Groq fails:** the host pinned is the first of the rule's own order among the hosts that pass, the rule applied without Groq (the cheapest within 1.5 times the fastest, a tie within 5 % to the faster).
+  If no host passes, Groq stays and the report says so.
+- **Implemented as `--incumbent`** of `eval/host_latency.py`: the incumbent defaults to the host pinned in the settings (`OPENROUTER_PROVIDER_ORDER`, today `groq`); `--incumbent none` gives the unconditional winner of the
+  19th. The report states whether the incumbent passes and what the unconditional winner would have been.
+
