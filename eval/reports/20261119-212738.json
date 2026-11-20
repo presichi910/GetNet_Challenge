@@ -1,0 +1,238 @@
+{
+  "summary": {
+    "cases": 3,
+    "provider_errors": 0,
+    "routing_accuracy": 1.0,
+    "tool_use_accuracy": 1.0,
+    "degraded_rate": 0.0,
+    "latency_ms_p50": 23246,
+    "latency_ms_p95": 84590,
+    "handoff_accuracy": 1.0,
+    "handoff_rate": 0.0,
+    "memory_accuracy": 1.0,
+    "agent_tokens": 13182,
+    "judge_tokens": 0,
+    "agent_tokens_per_case_mean": 4394,
+    "agent_cost_usd": 0.000674429,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.000674429,
+    "tokens_by_model": [
+      {
+        "role": "agents",
+        "model": "openai/gpt-oss-120b",
+        "calls": 10,
+        "input_tokens": 11667,
+        "output_tokens": 1515,
+        "cost_usd": 0.000674429
+      }
+    ],
+    "commit": "4e537826a57f20c81d696caae00b05b33ae9351d",
+    "tree_clean": true,
+    "replan_max": 0,
+    "rag_mode": "dense",
+    "verifier_mode": "statements",
+    "approvals": "off (eval)",
+    "fallback_provider": "off (eval)",
+    "label": "openrouter smoke"
+  },
+  "rows": [
+    {
+      "id": "q01_compare_plans",
+      "message": "What's the difference between the Get Clássica and the Get Smart?",
+      "plan": [
+        "knowledge"
+      ],
+      "answer": "**Get Clássica** – the basic, entry‑level terminal.  \n- Simple, reliable and intuitive; lets you start selling quickly.  \n- Accepts chip, magnetic‑stripe, contact‑less and mobile (Pix, QR) payments.  \n- No built‑in inventory or sales‑management features; it’s just a payment‑only device.  \n\n**Get Smart** – the advanced, all‑in‑one solution.  \n- Integrates sales, stock control and cash‑register functions in one device.  \n- Runs on Android, so you can install additional apps and connect to Getnet’s APIs.  \n- Accepts the same payment methods as Classic plus offers a richer “store‑front” experience (e.g., integrated POS, inventory, reporting).  \n\nIn short, **Get Clássica** is a straightforward payment terminal, while **Get Smart** adds inventory, sales‑management and app integration for businesses that need a more complete POS system.",
+      "tools_called": [
+        "search_getnet_kb"
+      ],
+      "evidence": [
+        "[search_getnet_kb] [1] (relevance=0.39) The perfect point of sale begins with our POS <https://www.getnet.net/en/our-solutions/in-person-payments>\nThe perfect point of sale begins with our POS\n\n## Get Classic\n\nThe basic POS for your sales.\n\n* All our terminals comply with PCI security standards to make your transactions secure\n* Get paid anywhere in your business in order to offer more comfort and a seanless experience\n* IIt's reliadble, intuitive and allows you to start selling fast.\n* Acceot chip card, magnetic stripe, contactless and mobiile payments\n\n## Get Smart\n\nThe POS to make your business grow.\n\n* From entering the stock to closing the cashier, everything is integrated.\n* Debit, credit card, vouchers, payment by approximation or via apps. The customer chooses the best way to pay.\n* Provide a new experience for your costumers with the Android system.\n* You can integrate the best API that fits your type of business\n\nGet Tap\n\n## Turn your smartphone into a tap-to-pay system\n\n### Fast & Easy\n\nAccept payments on your Android mobile or NFC-enabled tablet. No additional hardware or equipment required.\n\n[2] (relevance=0.37) Com o Get Tap você prepara seu negócio para Black Friday <https://site.getnet.com.br/get-tap>\nCom o Get Tap você prepara seu negócio para Black Friday\n\n**Get Tap**\n Grátis\n\n**Link de Pagamento**\n\n**Get Mini**\nR$ 14,90/mês\n\n**Get Clássica**\n R$ 79,90/mês\n\n**Get Smart**\n R$ 129,90/mês\n\n[3] (relevance=0.37) Quer taxas menores para o seu CNPJ? <https://site.getnet.com.br/taxas-personalizadas-eye>\nQuer taxas menores para o seu CNPJ?\n\n### Escolha sua maquininha\n\nVocê tem  R$ de desconto  no **aluguel** de suas maquininhas.\n\nRecomendada\n\nGet Mini\n\nPara quem está começando\n\nR$29,90\n\np/mês\n\nGrátis\n\nGanhe o link Get Pay + WhatsApp Business gratuitamente\n\nWi-fi e chip com plano de dados gratuitos\n\nComprovante via SMS\n\nAproximação, Pix e QR Code\n\nquero a get mini   pedir com ajuda\n\nGet Clássica\n\nCom bobina e sustentável\n\nR$79,90\n\nComprovante impresso\n\nquero a get clássica   pedir com ajuda\n\nGet Smart+ Eye\n\nA mais moderna e completa\n\nR$129,90\n\nGestão de vendas e estoque\n\nHabilitada para contratação do Aplicativo Eye - R$49,90 mês\n\nquero a get smart + eye   pedir com ajuda\n\nfale no whatsapp   ou ligue 4002-4000\n\nJá sou cliente Getnet\n\nver taxas\n\n[4] (relevance=0.35) wp content > uploads > 2025 > 09 > Manul GetSmart.pdf <https://site.getnet.com.br/wp-content/uploads/2025/09/Manul-GetSmart.pdf>\nwp content > uploads > 2025 > 09 > Manul GetSmart.pdf\n\nPara sua segurança é importante ficar atento e seguir as dicas: Fim » › › Manual Get Smart 14 Índice « Em caso de dúvidas ou necessidade de suporte, acesse o Get Ajuda, o portal da Getnet onde é possível encontrar todas as orientação ou informações atualizadas.\n1.\tVídeos com instruções detalhadas sobre todas as soluções; 2.\tRespostas às principais dúvidas técnicas; 3.\tLink direto para download do Aplicativo Getnet Brasil; 4.\tManuais completos de todos os modelos de maquininhas.\nSuporte completo para sua Get Smart Acesse agora mesmo o Get Ajuda e veja as principais informações para o seu negócio.\nManual Get Smart 11 Get Ajuda Get Ajuda Acesse o Get Ajuda FAQ com as principais dúvidas e tutoriais Vídeo tutoriais Soluções de erros sistêmicos Links com os principais canais Getnet Informações importantes para o seu negócio Fim » › ›\n\n[5] (relevance=0.35) wp content > uploads > 2025 > 09 > Manul GetSmart.pdf <https://site.getnet.com.br/wp-content/uploads/2025/09/Manul-GetSmart.pdf>\nwp content > uploads > 2025 > 09 > Manul GetSmart.pdf\n\nÚltima atualização: Junho/2025.\nManual Get Smart Manual Get Smart 2 Índice Índice Como fazer o fechamento de vendas 09 Como fazer a antecipação de vendas 08 Get Ajuda 11 Como reimprimir o comprovante de venda 06 Como fazer um estorno 05 Como fazer uma venda 04 Formas de pagamento 03 Configurações da Get Smart 02 Principais informações 01 Como conferir suas últimas vendas 07 Dicas de segurança 10 Fim » › › Índice « Manual Get Smart 3 Índice « Principais informações 01 Principais informações O que vem na caixa O que significa cada ícone Get Smart Maquininha de cartão Getnet Carregador Carregador bivolt original da maquininha Chip 4G Com plano de dados gratuitos ■Tela touchscreen; ■Leitor de chip; ■Leitor de terja magnética; ■Leitor integrado sem-contato (NFC); ■Comunicação 4G, Wi-Fi e Bluetooth."
+      ],
+      "verify_note": "",
+      "verify_raw": "{\"statements\": [{\"statement\": \"Get Clássica accepts chip, magnetic‑stripe, contact‑less and mobile payments.\", \"evidence_quote\": \"Acceot chip card, magnetic stripe, contactless and mobiile payments\", \"quote_found\": true}, {\"statement\": \"Get Clássica is a basic, entry‑level terminal.\", \"evidence_quote\": \"The basic POS for your sales.\", \"quote_found\": true}, {\"statement\": \"Get Smart integrates sales, stock control and cash‑register functions.\", \"evidence_quote\": \"From entering the stock to closing the cashier, everything is integrated.\", \"quote_found\": true}, {\"statement\": \"Get Smart runs on Android.\", \"evidence_quote\": \"Provide a new experience for your costumers with the Android system.\", \"quote_found\": true}, {\"statement\": \"Get Smart can integrate APIs.\", \"evidence_quote\": \"You can integrate the best API that fits your type of business\", \"quote_found\": true}, {\"statement\": \"Get Smart accepts debit, credit card, vouchers, payment by approximation or via apps.\", \"evidence_quote\": \"Debit, credit card, vouchers, payment by approximation or via apps.\", \"quote_found\": true}]}",
+      "tool_calls": [
+        {
+          "agent": "knowledge",
+          "name": "search_getnet_kb",
+          "args": {
+            "query": "Get Clássica vs Get Smart diferença"
+          }
+        }
+      ],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 84590,
+      "handoff": null,
+      "handoff_ok": true,
+      "usage": {
+        "input_tokens": 5738,
+        "output_tokens": 977,
+        "total_tokens": 6715,
+        "cost_usd": 0.000373068,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "calls": 1,
+            "input_tokens": 1065,
+            "output_tokens": 58,
+            "cost_usd": 4.7489e-05,
+            "cost_source": "provider"
+          },
+          {
+            "node": "knowledge",
+            "model": "openai/gpt-oss-120b",
+            "calls": 2,
+            "input_tokens": 2970,
+            "output_tokens": 275,
+            "cost_usd": 0.000154864,
+            "cost_source": "provider"
+          },
+          {
+            "node": "verify",
+            "model": "openai/gpt-oss-120b",
+            "calls": 1,
+            "input_tokens": 1703,
+            "output_tokens": 644,
+            "cost_usd": 0.000170715,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    },
+    {
+      "id": "q03_payout_timing",
+      "message": "When will the money from yesterday's sales be deposited?",
+      "plan": [
+        "support"
+      ],
+      "answer": "Your debit and Pix sales from yesterday are scheduled to be deposited on **2026‑11‑20** (net R$ 348.90).  \n\nThe first‑installment credit sales from yesterday will be deposited on **2026‑12‑19** (net R$ 224.85).",
+      "tools_called": [
+        "get_payout_schedule"
+      ],
+      "evidence": [
+        "[get_payout_schedule] [{\"reference\":\"Sales of yesterday (debit + Pix)\",\"gross\":352.0,\"fees\":3.1,\"net\":348.9,\"status\":\"scheduled\",\"sales_date\":\"2026-11-18\",\"expected_date\":\"2026-11-20\",\"days_until_deposit\":1},{\"reference\":\"Sales of yesterday (credit, 1st installment)\",\"gross\":233.25,\"fees\":8.4,\"net\":224.85,\"status\":\"scheduled\",\"sales_date\":\"2026-11-18\",\"expected_date\":\"2026-12-19\",\"days_until_deposit\":30},{\"reference\":\"Sales of 2 days ago (debit + Pix)\",\"gross\":596.3,\"fees\":5.2,\"net\":591.1,\"status\":\"processing\",\"sales_date\":\"2026-11-17\",\"expected_date\":\"2026-11-19\",\"days_until_deposit\":0},{\"reference\":\"Sales of 3 days ago\",\"gross\":515.8,\"fees\":0.0,\"net\":515.8,\"status\":\"paid\",\"sales_date\":\"2026-11-16\",\"expected_date\":\"2026-11-18\",\"days_until_deposit\":-1}]"
+      ],
+      "verify_note": "",
+      "verify_raw": "{\"statements\": [{\"statement\": \"Debit and Pix sales from yesterday will be deposited on 2026‑11‑20 (net R$ 348.90).\", \"evidence_quote\": \"\\\"expected_date\\\":\\\"2026-11-20\\\",\\\"net\\\":348.9\", \"quote_found\": true}, {\"statement\": \"First‑installment credit sales from yesterday will be deposited on 2026‑12‑19 (net R$ 224.85).\", \"evidence_quote\": \"\\\"expected_date\\\":\\\"2026-12-19\\\",\\\"net\\\":224.85\", \"quote_found\": true}]}",
+      "tool_calls": [
+        {
+          "agent": "support",
+          "name": "get_payout_schedule",
+          "args": {}
+        }
+      ],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 23246,
+      "handoff": null,
+      "handoff_ok": true,
+      "usage": {
+        "input_tokens": 4568,
+        "output_tokens": 445,
+        "total_tokens": 5013,
+        "cost_usd": 0.00023637799999999998,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "calls": 1,
+            "input_tokens": 1062,
+            "output_tokens": 75,
+            "cost_usd": 5.2044e-05,
+            "cost_source": "provider"
+          },
+          {
+            "node": "support",
+            "model": "openai/gpt-oss-120b",
+            "calls": 2,
+            "input_tokens": 2841,
+            "output_tokens": 97,
+            "cost_usd": 0.00011983100000000001,
+            "cost_source": "provider"
+          },
+          {
+            "node": "verify",
+            "model": "openai/gpt-oss-120b",
+            "calls": 1,
+            "input_tokens": 665,
+            "output_tokens": 273,
+            "cost_usd": 6.4503e-05,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m01_recall_color",
+      "message": "What favorite color did I tell you?",
+      "plan": [],
+      "answer": "You mentioned that your favorite color is green.",
+      "tools_called": [],
+      "evidence": [],
+      "verify_note": "",
+      "verify_raw": "",
+      "tool_calls": [],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 5392,
+      "handoff": null,
+      "handoff_ok": true,
+      "history": [
+        {
+          "role": "user",
+          "content": "My favorite color is green, please remember it."
+        },
+        {
+          "role": "assistant",
+          "content": "Got it, your favorite color is green."
+        }
+      ],
+      "memory": {
+        "restart": true,
+        "seeded": 2,
+        "restored": 2,
+        "restored_intact": true,
+        "after": 4,
+        "answered_in_thread": true
+      },
+      "memory_ok": true,
+      "usage": {
+        "input_tokens": 1361,
+        "output_tokens": 93,
+        "total_tokens": 1454,
+        "cost_usd": 6.4983e-05,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "calls": 1,
+            "input_tokens": 1088,
+            "output_tokens": 65,
+            "cost_usd": 5.1306e-05,
+            "cost_source": "provider"
+          },
+          {
+            "node": "synthesizer",
+            "model": "openai/gpt-oss-120b",
+            "calls": 1,
+            "input_tokens": 273,
+            "output_tokens": 28,
+            "cost_usd": 1.3677e-05,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    }
+  ]
+}
