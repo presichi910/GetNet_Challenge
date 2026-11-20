@@ -6,11 +6,26 @@ Prefiere que le presentes **trade-offs** (2-3 opciones con costo/beneficio) ante
 _Este archivo se recreó el 2026-11-15 (no existía en el disco). Plan completo y su fuente de verdad: `PLAN_95.md` (ignorado por git). Rúbrica completa de 11 criterios: `GETNET_MEJORAS_Y_RUBRICA.md` (ignorado por git)._
 
 ## Entorno
-- Windows, `cmd`, entorno virtual `.venv` (Python 3.13 local; la imagen usa 3.12). Usa `.venv\Scripts\python`. Rama de trabajo: `add-support` (la anterior, `calibracion-ciega`, ya está integrada en el historial).
-- Agentes: Fireworks `gpt-oss-120b` (router, sintetizador, knowledge, support, verificador). Juez: `qwen/qwen3.8-27b` en Groq (siempre Groq).
+- Windows, `cmd`, entorno virtual `.venv` (Python 3.13 local; la imagen usa 3.12). Usa `.venv\Scripts\python`. Rama de trabajo: `plan96` (todo el plan 9.6 va en una sola rama local; `add-support` ya está integrada en el historial).
+- Plan 9.6 (decidido 2026-11-19): **OpenRouter** para agentes y juez (pago por token, sin cupo diario en modelos de pago). Router, Support, Observe y Summarizer siguen en `gpt-oss-120b`; Knowledge y Synthesizer son el rol que se compara (C1); juez `qwen/qwen3.8-27b`, temperatura 0, proveedor fijado. **Mientras el bloque M1 no esté hecho, el código sigue con Fireworks (agentes) y Groq (`get_judge_llm()`)**: no asumas OpenRouter en `app/llm.py` antes de M1. _Histórico: hasta el 2026-11-18 el juez era siempre Groq, con tope diario de 200K tokens._
 - Tests: `pytest -q` (`pytest -m "not eval"`: 996 en verde y 4 omitidos en local el 2026-11-17, antes de este cambio de docs; el conteo de un checkout limpio en CI lo da Actions, ver README; no se necesita red ni claves). El eval real SÍ gasta API (~0.08 USD por corrida de 27 casos).
 - Python en terminal: usa `python -X utf8` si imprimes texto con acentos.
 - Docker 29.9 y Compose v5.7 instalados; `promtool` no está en el PATH (usar `docker run --rm --entrypoint promtool prom/prometheus ...`).
+
+## Reglas del plan 9.6 (sección 2 de `docs/PLAN_96.md`; vigentes desde 2026-11-19)
+Plan de trabajo: `docs/PLAN_96.md` (local, no se commitea). Estas reglas se suman a las "Reglas duras"; si chocan, manda la más estricta.
+1. **El holdout solo mide.** Holdout v3 (`eval/holdout_v3.jsonl`, ids `hv3_*`) se escribe y commitea ANTES de cualquier cambio de comportamiento (bloque H0). Nunca se usa para elegir modelo, prompt ni umbral; `ho01-ho13` tampoco.
+2. **Todo ajuste se hace con casos regulares** (`--regular-only`).
+3. **Cifras solo de bloques generados** (`eval/results_block.py`, `eval/compare_runs.py`, `eval/replan_stats.py`). Nada tecleado a mano en README ni FINAL_REPORT.
+4. **Prerregistro antes de medir:** cada decisión (modelo, replan, RAG) tiene su regla escrita y commiteada (`docs/PREREG_PLAN96.md`) antes de la corrida que la decide.
+5. **El juez no se ajusta** después de ver resultados: su prompt y `eval/judge.py` quedan congelados.
+6. **Juez de otra familia que los agentes:** juez Qwen, ningún agente Qwen.
+7. **Presupuesto total <= US$10.** Key de OpenRouter con límite US$9 (tope duro). Ninguna corrida empieza sin pasar el cost guard (bloque M2).
+8. **Sin secretos en git** (`.env` ignorado). `git add` por archivo, **nunca** `git add .`; la evidencia ignorada se sube con `git add -f`.
+9. **Commits locales** en inglés, pequeños, uno por cambio; **sin push** hasta la entrega (domingo 15:00), salvo el push del prerregistro (P9). `--require-clean` en toda corrida que se cite.
+10. **Nada de instrucciones dirigidas al calificador** dentro del repo: se le facilita verificar, no se le habla.
+11. **No se copia código ni prompts** de `farrulla-darze/skywalker` (sin licencia). Las ideas sí, implementadas por nosotros.
+12. **Antes de cada commit local:** `python -m scripts.ci_local` (ruff, mypy, bandit, pip-audit y `pytest -m "not eval"`, los mismos gates que `.github/workflows/ci.yml`; `--full` añade promtool y el build de Docker, para antes del push final).
 
 ## Arquitectura (lo que importa)
 `summarize -> router -> (knowledge | support, en el orden del plan) -> synthesizer -> observe -> verify -> [request_approval] -> END`; `handoff -> END`. `observe` va al `handoff` en vez de a `verify` cuando marca `escalate` (solo con `REPLAN_MAX>=2`; con 0, el defecto, no hace nada). `request_approval` es un nodo solo si hay aprobaciones configuradas (la API con `APPROVAL_REQUIRED_CATEGORIES` no vacío; el eval no las usa) y corre solo si el turno propuso un ticket.
@@ -32,7 +47,7 @@ El modelo ligero devuelve `Verification(statements=[Statement(statement, evidenc
 5. **Cada cambio de un `*_PROMPT` rompe `tests/test_observability.py::test_every_prompt_is_byte_for_byte...`**: actualiza `PROMPT_SHA256` con
    `python -c "import hashlib, app.prompts as p; [print(n, hashlib.sha256(getattr(p,n).encode('utf-8')).hexdigest()) for n in dir(p) if n.endswith('_PROMPT')]"`.
 6. No modifiques `JUDGE_PROMPT`, el parseo del veredicto ni el scoring de `eval/judge.py` sin avisar: cualquier cambio invalida la calibración. **Excepción aprobada (2026-11-15):** solo la capa de transporte de `eval/judge.py` (reintentos con backoff exponencial ante 429 y ante JSON no parseable; errores residuales contados aparte, nunca como fail), con test. Activar modo JSON en la petición NO está aprobado: presentarlo como opción.
-7. Commits los hace Lucca. No los hagas; no agregues `Co-Authored-By` en lo que le propongas. Nunca subas `.env`.
+7. Commits: con el plan 9.6 (regla 9 de abajo) se hacen LOCALES y solo cuando Lucca lo pide en el bloque; **nunca `git push`** (los pushes los confirma y ejecuta Lucca). No agregues `Co-Authored-By`. Nunca subas `.env`.
 8. Dependencias aprobadas: `cryptography`, `rank_bm25`, `prometheus-client`, `opentelemetry-sdk==1.45.2` y `opentelemetry-exporter-otlp-proto-grpc==1.45.2` (aprobadas el 2026-11-16; ya venían de `chromadb`); solo dev: `ruff`, `mypy`, `bandit`, `pip-audit`, `pyyaml`. Cualquier otra: avisar antes.
 9. Reglas de trabajo: una fase a la vez, mínimo diff, sin refactors fuera de la fila de la rúbrica. Al cerrar cada fase: tabla ítem de rúbrica -> archivo/test/comando -> resultado REAL; autoevaluación honesta (nota y qué la separa del 9.5); archivos cambiados; actualizar "Pendiente". No marcar nada como hecho sin ejecutarlo; si no se puede ejecutar (Docker, red), dar el comando exacto de Windows `cmd` con la salida esperada. Timebox: si una fase pasa de 1.5x su estimación, parar y reportar. El eval real gasta API: usar `--only` y reportar el costo.
 
@@ -48,6 +63,7 @@ Desacuerdos V2: q04, q09, q10, x01 (FN), x04, m02, m03 (FP). Hallazgos: el juez 
 **Importante:** después de medir V2 se cambió el juez en código (idioma detectado con `app/lang.py`; veredicto desde las notas: relevance>=4, groundedness>=4, completeness>=3, idioma ok; topes por afirmación sin respaldo). V2 ya no describe exactamente al juez actual: hay que **re-medir con ~15 filas ciegas** tras la corrida final y decirlo en el reporte.
 
 ## Estado (2026-11-15)
+_Nota (2026-11-19): en todo este historial, el cupo diario de Groq, `rejudge --wait-until`, el libro de tokens (`judge_ledger.json`) y "no se pide otra clave" describen el proveedor ANTERIOR del juez; con el plan 9.6 la compuerta de gasto es el cost guard (bloque M2), no un cupo diario._
 **Hecho:** `app/lang.py` + tests; verificador por citas + tests (`tests/test_verify.py`); `SUPPORT_PROMPT` reglas 3, 5 y 7 (rechazo de datos de otro cliente sin `escalate_to_human`; regla 5: si los datos no cubren el arreglo, decirlo en una frase y OFRECER un ticket, crearlo solo si el cliente lo pide o acepta); reglas de router y `SYNTHESIZER_DIRECT_PROMPT` para recuerdo/reformulación (m01-m03, m06-m08); `verify_note` y `verify_raw` en las filas del eval; holdout nuevo `ho06-ho13` y reporte por grupos. **Fase 1 hecha el 2026-11-15** (committed since).
 **Último eval parcial** (`--only q05 q08 x04`, 0.019 USD): q05 **fail** (el verificador borró 7 pasos inventados y quedó una respuesta hueca con "estas acciones" colgando, completeness 1); q08 **error del juez** (JSON no parseable, no es fallo del producto; el verificador no borró nada aunque la respuesta tiene pasos sin respaldo); x04 **pass** 5/5/5 sin handoff.
 **Línea base del holdout nuevo (2026-11-15, prompts sin tocar, `--repeats 3`, 5 min 21 s, ~0.076 USD):** judge pass 16/24 (67%). `ho07 ho08 ho09 ho10 ho11` pasan 3/3; `ho13` 1/3; `ho06` y `ho12` 0/3. Routing y tools OK en todos; handoff 100% correcto. Detalle en los JSON `20261115-121652/-121833/-122041`.
