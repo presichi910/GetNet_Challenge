@@ -1,0 +1,120 @@
+{
+  "summary": {
+    "cases": 1,
+    "provider_errors": 0,
+    "routing_accuracy": 1.0,
+    "tool_use_accuracy": 1.0,
+    "degraded_rate": 0.0,
+    "latency_ms_p50": 12943,
+    "latency_ms_p95": 12943,
+    "handoff_accuracy": 1.0,
+    "handoff_rate": 0.0,
+    "agent_tokens": 8027,
+    "judge_tokens": 0,
+    "agent_tokens_per_case_mean": 8027,
+    "agent_cost_usd": 0.0019087499999999999,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.0019087499999999999,
+    "tokens_by_model": [
+      {
+        "role": "agents",
+        "model": "openai/gpt-oss-120b",
+        "calls": 5,
+        "input_tokens": 6461,
+        "output_tokens": 1566,
+        "hosts": [
+          "Groq"
+        ],
+        "cost_usd": 0.0019087499999999999
+      }
+    ],
+    "commit": "98f869f2cd1419bde335c299645b23c75ca3cad6",
+    "tree_clean": true,
+    "replan_max": 0,
+    "rag_mode": "dense",
+    "verifier_mode": "statements",
+    "approvals": "off (eval)",
+    "fallback_provider": "off (eval)",
+    "agent_provider": "openrouter",
+    "judge_provider": "openrouter",
+    "openrouter_provider_order": "openai/gpt-oss-120b=groq; qwen/qwen3.8-27b=alibaba",
+    "openrouter_allow_fallbacks": false,
+    "label": "host groq"
+  },
+  "rows": [
+    {
+      "id": "q01_compare_plans",
+      "message": "What's the difference between the Get Clássica and the Get Smart?",
+      "plan": [
+        "knowledge"
+      ],
+      "answer": "**Main difference**\n\n- **Get Classic** – Basic card machine, focused only on payment capture (chip, magnetic stripe, contact‑less, Pix, QR Code). It is intended for those who want to start selling quickly, without the need for inventory management or advanced integration.\n\n- **Get Smart** – More complete terminal, with Android and integrated sales and inventory management features, in addition to all payment methods of the Classic. Allows connecting APIs, using the Eye app (management) and offers 4G/Wi‑Fi/Bluetooth connectivity.\n\n**Summary in bullet points**\n\n- **Functionality**\n  - *Classic*: payment capture, printed receipt, no management features.\n  - *Smart*: payment capture + inventory control, API integration, Android experience.\n\n- **Connectivity**\n  - *Classic*: Wi‑Fi (no 4G/Bluetooth).\n  - *Smart*: Wi‑Fi, 4G and Bluetooth.\n\n- **Rental price (as per plans page)**\n  - *Classic*: R$ 79,90 /month.\n  - *Smart*: R$ 129,90 /month (includes sales/inventory management and Eye app option).\n\n- **Recommendation**\n  - *Classic*: businesses that only need payment acceptance.\n  - *Smart*: businesses that want to grow with inventory control and system integration.",
+      "tools_called": [
+        "search_getnet_kb"
+      ],
+      "evidence": [
+        "[search_getnet_kb] [1] (relevance=0.38) The perfect point of sale begins with our POS <https://www.getnet.net/en/our-solutions/in-person-payments>\nThe perfect point of sale begins with our POS\n\n## Get Classic\n\nThe basic POS for your sales.\n\n* All our terminals comply with PCI security standards to make your transactions secure\n* Get paid anywhere in your business in order to offer more comfort and a seanless experience\n* IIt's reliadble, intuitive and allows you to start selling fast.\n* Acceot chip card, magnetic stripe, contactless and mobiile payments\n\n## Get Smart\n\nThe POS to make your business grow.\n\n* From entering the stock to closing the cashier, everything is integrated.\n* Debit, credit card, vouchers, payment by approximation or via apps. The customer chooses the best way to pay.\n* Provide a new experience for your costumers with the Android system.\n* You can integrate the best API that fits your type of business\n\nGet Tap\n\n## Turn your smartphone into a tap-to-pay system\n\n### Fast & Easy\n\nAccept payments on your Android mobile or NFC-enabled tablet. No additional hardware or equipment required.\n\n[2] (relevance=0.37) Quer taxas menores para o seu CNPJ? <https://site.getnet.com.br/taxas-personalizadas-eye>\nQuer taxas menores para o seu CNPJ?\n\n### Escolha sua maquininha\n\nVocê tem  R$ de desconto  no **aluguel** de suas maquininhas.\n\nRecomendada\n\nGet Mini\n\nPara quem está começando\n\nR$29,90\n\np/mês\n\nGrátis\n\nGanhe o link Get Pay + WhatsApp Business gratuitamente\n\nWi-fi e chip com plano de dados gratuitos\n\nComprovante via SMS\n\nAproximação, Pix e QR Code\n\nquero a get mini   pedir com ajuda\n\nGet Clássica\n\nCom bobina e sustentável\n\nR$79,90\n\nComprovante impresso\n\nquero a get clássica   pedir com ajuda\n\nGet Smart+ Eye\n\nA mais moderna e completa\n\nR$129,90\n\nGestão de vendas e estoque\n\nHabilitada para contratação do Aplicativo Eye - R$49,90 mês\n\nquero a get smart + eye   pedir com ajuda\n\nfale no whatsapp   ou ligue 4002-4000\n\nJá sou cliente Getnet\n\nver taxas\n\n[3] (relevance=0.37) Com o Get Tap você prepara seu negócio para Black Friday <https://site.getnet.com.br/get-tap>\nCom o Get Tap você prepara seu negócio para Black Friday\n\n**Get Tap**\n Grátis\n\n**Link de Pagamento**\n\n**Get Mini**\nR$ 14,90/mês\n\n**Get Clássica**\n R$ 79,90/mês\n\n**Get Smart**\n R$ 129,90/mês\n\n[4] (relevance=0.36) wp content > uploads > 2025 > 09 > Manul GetSmart.pdf <https://site.getnet.com.br/wp-content/uploads/2025/09/Manul-GetSmart.pdf>\nwp content > uploads > 2025 > 09 > Manul GetSmart.pdf\n\nPrincipais características da Get Smart 1.\tSua maquininha é bivolt; 2.\tUse apenas o carregador original; 3.\tNão use nenhum tipo de produto de limpeza, apenas um pano seco e limpo; 4.\tEvite exposição prolongado à luz do sol; 5.\tNão molhar; 6.\tNão deixar cair; 7.\tO terminal só pode ser aberto por técnicos autorizados.\nCuidados Pagamento por aproximação Bluetooth Sinal 4G Wi-fi Bateria Fim » › › Manual Get Smart 4 Índice « Configurações da Get Smart 02 Configurações da Get Smart Sua Get Smart oferece diversas opções de configuração diretamente na própria maquininha. Para acessá-las, basta tocar em “Configurar” na tela inicial. Confira abaixo as funcionalidades disponíveis: Wi-Fi ■Visualize as redes disponíveis e conecte-se facilmente a uma rede Wi-Fi.\nSistema ■Consulte informações sobre o Auttar (disponível apenas para maquininhas com TEF). ■Restaure o sistema (função restrita ao suporte técnico, com senha de acesso).\n\n[5] (relevance=0.36) wp content > uploads > 2025 > 09 > Manul GetSmart.pdf <https://site.getnet.com.br/wp-content/uploads/2025/09/Manul-GetSmart.pdf>\nwp content > uploads > 2025 > 09 > Manul GetSmart.pdf\n\nÚltima atualização: Junho/2025.\nManual Get Smart Manual Get Smart 2 Índice Índice Como fazer o fechamento de vendas 09 Como fazer a antecipação de vendas 08 Get Ajuda 11 Como reimprimir o comprovante de venda 06 Como fazer um estorno 05 Como fazer uma venda 04 Formas de pagamento 03 Configurações da Get Smart 02 Principais informações 01 Como conferir suas últimas vendas 07 Dicas de segurança 10 Fim » › › Índice « Manual Get Smart 3 Índice « Principais informações 01 Principais informações O que vem na caixa O que significa cada ícone Get Smart Maquininha de cartão Getnet Carregador Carregador bivolt original da maquininha Chip 4G Com plano de dados gratuitos ■Tela touchscreen; ■Leitor de chip; ■Leitor de terja magnética; ■Leitor integrado sem-contato (NFC); ■Comunicação 4G, Wi-Fi e Bluetooth."
+      ],
+      "verify_note": "translated:pt->en",
+      "verify_raw": "{\"statements\": [{\"statement\": \"Get Clássica captures chip, magnetic stripe, contactless and mobile payments\", \"evidence_quote\": \"Acceot chip card, magnetic stripe, contactless and mobiile payments\", \"quote_found\": true}, {\"statement\": \"Get Smart provides a new experience with the Android system\", \"evidence_quote\": \"Provide a new experience for your costumers with the Android system.\", \"quote_found\": true}, {\"statement\": \"Get Smart allows integration of APIs\", \"evidence_quote\": \"You can integrate the best API that fits your type of business\", \"quote_found\": true}, {\"statement\": \"Get Smart includes stock management and sales control\", \"evidence_quote\": \"From entering the stock to closing the cashier, everything is integrated.\", \"quote_found\": true}, {\"statement\": \"Get Smart price is R$129,90 per month\", \"evidence_quote\": \"R$ 129,90\", \"quote_found\": true}, {\"statement\": \"Get Smart price is R$129,90/mês\", \"evidence_quote\": \"R$ 129,90/mês\", \"quote_found\": true}, {\"statement\": \"Get Clássica price is R$79,90 per month\", \"evidence_quote\": \"R$79,90\", \"quote_found\": true}, {\"statement\": \"Get Clássica price is R$79,90/mês\", \"evidence_quote\": \"R$ 79,90/mês\", \"quote_found\": true}, {\"statement\": \"Get Smart includes Wi‑Fi connectivity\", \"evidence_quote\": \"Wi‑Fi\", \"quote_found\": true}, {\"statement\": \"Get Smart includes 4G connectivity\", \"evidence_quote\": \"4G\", \"quote_found\": true}, {\"statement\": \"Get Smart includes Bluetooth connectivity\", \"evidence_quote\": \"Bluetooth\", \"quote_found\": true}, {\"statement\": \"Get Smart can be enabled with the Eye app for R$49,90 per month\", \"evidence_quote\": \"Habilitada para contratação do Aplicativo Eye - R$49,90 mês\", \"quote_found\": true}]}",
+      "tool_calls": [
+        {
+          "agent": "knowledge",
+          "name": "search_getnet_kb",
+          "args": {
+            "query": "Get Clássica Get Smart diferença"
+          }
+        }
+      ],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 12943,
+      "handoff": null,
+      "handoff_ok": true,
+      "usage": {
+        "input_tokens": 6461,
+        "output_tokens": 1566,
+        "total_tokens": 8027,
+        "cost_usd": 0.0019087499999999999,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 1,
+            "latency_ms": 750,
+            "input_tokens": 1083,
+            "output_tokens": 60,
+            "cost_usd": 0.00019845,
+            "cost_source": "provider"
+          },
+          {
+            "node": "knowledge",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 2,
+            "latency_ms": 1646,
+            "input_tokens": 3063,
+            "output_tokens": 393,
+            "cost_usd": 0.0006952499999999999,
+            "cost_source": "provider"
+          },
+          {
+            "node": "verify",
+            "model": "openai/gpt-oss-120b",
+            "host": "Groq",
+            "calls": 2,
+            "latency_ms": 3005,
+            "input_tokens": 2315,
+            "output_tokens": 1113,
+            "cost_usd": 0.00101505,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    }
+  ]
+}

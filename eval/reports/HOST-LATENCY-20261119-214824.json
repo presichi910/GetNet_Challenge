@@ -1,0 +1,1683 @@
+{
+  "at_utc": "2026-11-20 03:58:00",
+  "commit": "98f869f2cd1419bde335c299645b23c75ca3cad6",
+  "tree_clean": true,
+  "cap_usd": 0.1,
+  "model": "openai/gpt-oss-120b",
+  "rule": "docs/PREREG_PLAN96.md, Enmienda 1",
+  "spent_usd": 0.021093881499999998,
+  "prior_spend_usd": 0.000974,
+  "endpoints": [
+    {
+      "tag": "near-ai/fp4",
+      "quantization": "fp4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "venice/int4",
+      "quantization": "int4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization int4"
+    },
+    {
+      "tag": "coreweave/fp4",
+      "quantization": "fp4",
+      "uptime": 70,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "dekallm/bf16",
+      "quantization": "bf16",
+      "uptime": 100,
+      "tools": true,
+      "eligible": true,
+      "reason": "ok"
+    },
+    {
+      "tag": "akashml/fp4",
+      "quantization": "fp4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "deepinfra/bf16",
+      "quantization": "bf16",
+      "uptime": 90,
+      "tools": true,
+      "eligible": false,
+      "reason": "uptime 90.0 %"
+    },
+    {
+      "tag": "crusoe/bf16",
+      "quantization": "bf16",
+      "uptime": 100,
+      "tools": true,
+      "eligible": true,
+      "reason": "ok"
+    },
+    {
+      "tag": "sail-research/fp4",
+      "quantization": "fp4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "digitalocean",
+      "quantization": "unknown",
+      "uptime": null,
+      "tools": false,
+      "eligible": false,
+      "reason": "no tools"
+    },
+    {
+      "tag": "mancer/fp8",
+      "quantization": "fp8",
+      "uptime": null,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp8"
+    },
+    {
+      "tag": "google-vertex/global",
+      "quantization": "unknown",
+      "uptime": 100,
+      "tools": false,
+      "eligible": false,
+      "reason": "no tools"
+    },
+    {
+      "tag": "baseten/fp4/us",
+      "quantization": "fp4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "baseten/fp4",
+      "quantization": "fp4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "parasail/fp4",
+      "quantization": "fp4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "sambanova",
+      "quantization": "unknown",
+      "uptime": 100,
+      "tools": true,
+      "eligible": true,
+      "reason": "ok"
+    },
+    {
+      "tag": "amazon-bedrock/eu-west-1",
+      "quantization": "unknown",
+      "uptime": 100,
+      "tools": true,
+      "eligible": true,
+      "reason": "ok"
+    },
+    {
+      "tag": "nebius/fp4",
+      "quantization": "fp4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "amazon-bedrock",
+      "quantization": "unknown",
+      "uptime": 100,
+      "tools": true,
+      "eligible": true,
+      "reason": "ok"
+    },
+    {
+      "tag": "siliconflow/fp8",
+      "quantization": "fp8",
+      "uptime": null,
+      "tools": false,
+      "eligible": false,
+      "reason": "quantization fp8"
+    },
+    {
+      "tag": "together",
+      "quantization": "unknown",
+      "uptime": 100,
+      "tools": true,
+      "eligible": true,
+      "reason": "ok"
+    },
+    {
+      "tag": "groq",
+      "quantization": "unknown",
+      "uptime": 100,
+      "tools": true,
+      "eligible": true,
+      "reason": "ok"
+    },
+    {
+      "tag": "parasail/fast",
+      "quantization": "fp4",
+      "uptime": null,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "primeintellect/fp4",
+      "quantization": "fp4",
+      "uptime": 100,
+      "tools": true,
+      "eligible": false,
+      "reason": "quantization fp4"
+    },
+    {
+      "tag": "cerebras/fp16",
+      "quantization": "fp16",
+      "uptime": 96.66666666666667,
+      "tools": true,
+      "eligible": false,
+      "reason": "uptime 96.7 %"
+    }
+  ],
+  "candidates": [
+    "dekallm/bf16",
+    "crusoe/bf16",
+    "amazon-bedrock/eu-west-1",
+    "amazon-bedrock",
+    "together",
+    "groq",
+    "sambanova"
+  ],
+  "reference": [
+    "deepinfra/bf16"
+  ],
+  "hosts": [
+    {
+      "tag": "dekallm/bf16",
+      "provider_name": "DekaLLM",
+      "quantization": "bf16",
+      "reference": false,
+      "listed_per_mtok": [
+        0.03,
+        0.18
+      ],
+      "uptime_last_30m": 100,
+      "measured": true,
+      "calls": 10,
+      "calls_tool_ok": 5,
+      "calls_host_ok": 5,
+      "calls_error": 5,
+      "p50_ms": 488.0,
+      "max_ms": 7271,
+      "mean_cost_usd": 3.5358e-05,
+      "q01": {
+        "ran": true,
+        "latencies_ms": [
+          3460,
+          10468
+        ],
+        "cost_usd": 0,
+        "hosts": [],
+        "ok": false,
+        "files": [
+          "20261119-214935.json",
+          "20261119-215007.json"
+        ],
+        "error": null,
+        "errors": [
+          "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp",
+          "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp"
+        ]
+      },
+      "tools_work": false,
+      "spent_usd": 0.00017679,
+      "calls_detail": [
+        {
+          "kind": "router",
+          "case": "q01",
+          "status": 404,
+          "latency_ms": 158,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q03",
+          "status": 404,
+          "latency_ms": 91,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q06",
+          "status": 404,
+          "latency_ms": 109,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q09",
+          "status": 404,
+          "latency_ms": 40,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q10",
+          "status": 404,
+          "latency_ms": 68,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "knowledge",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 1687,
+          "host": "DekaLLM",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 43,
+          "cost_usd": 3.48e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 7271,
+          "host": "DekaLLM",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 49,
+          "cost_usd": 3.579e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 1025,
+          "host": "DekaLLM",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 45,
+          "cost_usd": 3.522e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 818,
+          "host": "DekaLLM",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 45,
+          "cost_usd": 3.519e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 1330,
+          "host": "DekaLLM",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 49,
+          "cost_usd": 3.579e-05,
+          "error": null
+        }
+      ]
+    },
+    {
+      "tag": "crusoe/bf16",
+      "provider_name": "Crusoe",
+      "quantization": "bf16",
+      "reference": false,
+      "listed_per_mtok": [
+        0.049999999999999996,
+        0.25
+      ],
+      "uptime_last_30m": 100,
+      "measured": true,
+      "calls": 10,
+      "calls_tool_ok": 5,
+      "calls_host_ok": 5,
+      "calls_error": 5,
+      "p50_ms": 644.0,
+      "max_ms": 1162,
+      "mean_cost_usd": 5.657e-05,
+      "q01": {
+        "ran": true,
+        "latencies_ms": [
+          2451,
+          3218
+        ],
+        "cost_usd": 0,
+        "hosts": [],
+        "ok": false,
+        "files": [
+          "20261119-215043.json",
+          "20261119-215101.json"
+        ],
+        "error": null,
+        "errors": [
+          "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp",
+          "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp"
+        ]
+      },
+      "tools_work": false,
+      "spent_usd": 0.00028285,
+      "calls_detail": [
+        {
+          "kind": "router",
+          "case": "q01",
+          "status": 404,
+          "latency_ms": 1162,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q03",
+          "status": 404,
+          "latency_ms": 80,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q06",
+          "status": 404,
+          "latency_ms": 54,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q09",
+          "status": 404,
+          "latency_ms": 61,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q10",
+          "status": 404,
+          "latency_ms": 78,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "knowledge",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 1003,
+          "host": "Crusoe",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 43,
+          "cost_usd": 5.585e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 708,
+          "host": "Crusoe",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 47,
+          "cost_usd": 5.67e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 580,
+          "host": "Crusoe",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 46,
+          "cost_usd": 5.67e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 727,
+          "host": "Crusoe",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 45,
+          "cost_usd": 5.64e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 774,
+          "host": "Crusoe",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 49,
+          "cost_usd": 5.72e-05,
+          "error": null
+        }
+      ]
+    },
+    {
+      "tag": "amazon-bedrock/eu-west-1",
+      "provider_name": "Amazon Bedrock",
+      "quantization": "unknown",
+      "reference": false,
+      "listed_per_mtok": [
+        0.15,
+        0.6
+      ],
+      "uptime_last_30m": 100,
+      "measured": true,
+      "calls": 10,
+      "calls_tool_ok": 5,
+      "calls_host_ok": 5,
+      "calls_error": 5,
+      "p50_ms": 645.5,
+      "max_ms": 30419,
+      "mean_cost_usd": 0.0001632,
+      "q01": {
+        "ran": true,
+        "latencies_ms": [
+          3220,
+          2637
+        ],
+        "cost_usd": 0,
+        "hosts": [],
+        "ok": false,
+        "files": [
+          "20261119-215216.json",
+          "20261119-215234.json"
+        ],
+        "error": null,
+        "errors": [
+          "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp",
+          "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp"
+        ]
+      },
+      "tools_work": false,
+      "spent_usd": 0.000816,
+      "calls_detail": [
+        {
+          "kind": "router",
+          "case": "q01",
+          "status": 404,
+          "latency_ms": 159,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q03",
+          "status": 404,
+          "latency_ms": 50,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q06",
+          "status": 404,
+          "latency_ms": 267,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q09",
+          "status": 404,
+          "latency_ms": 107,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q10",
+          "status": 404,
+          "latency_ms": 361,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "knowledge",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 30419,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 43,
+          "cost_usd": 0.00016125,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 1008,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 57,
+          "cost_usd": 0.0001692,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 930,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 46,
+          "cost_usd": 0.00016335,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 1026,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 42,
+          "cost_usd": 0.0001608,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 1181,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 44,
+          "cost_usd": 0.0001614,
+          "error": null
+        }
+      ]
+    },
+    {
+      "tag": "amazon-bedrock",
+      "provider_name": "Amazon Bedrock",
+      "quantization": "unknown",
+      "reference": false,
+      "listed_per_mtok": [
+        0.15,
+        0.6
+      ],
+      "uptime_last_30m": 100,
+      "measured": true,
+      "calls": 10,
+      "calls_tool_ok": 5,
+      "calls_host_ok": 5,
+      "calls_error": 5,
+      "p50_ms": 350.5,
+      "max_ms": 1286,
+      "mean_cost_usd": 0.00016416,
+      "q01": {
+        "ran": true,
+        "latencies_ms": [
+          3302,
+          3085
+        ],
+        "cost_usd": 0,
+        "hosts": [],
+        "ok": false,
+        "files": [
+          "20261119-215314.json",
+          "20261119-215338.json"
+        ],
+        "error": null,
+        "errors": [
+          "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp",
+          "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp"
+        ]
+      },
+      "tools_work": false,
+      "spent_usd": 0.0008208,
+      "calls_detail": [
+        {
+          "kind": "router",
+          "case": "q01",
+          "status": 404,
+          "latency_ms": 97,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q03",
+          "status": 404,
+          "latency_ms": 40,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q06",
+          "status": 404,
+          "latency_ms": 56,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q09",
+          "status": 404,
+          "latency_ms": 189,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "router",
+          "case": "q10",
+          "status": 404,
+          "latency_ms": 112,
+          "host": null,
+          "host_ok": false,
+          "finish_reason": null,
+          "tool": null,
+          "tool_ok": false,
+          "completion_tokens": null,
+          "cost_usd": null,
+          "error": "No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed dekallm/bf16, akashml/fp4,"
+        },
+        {
+          "kind": "knowledge",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 512,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 44,
+          "cost_usd": 0.00016185,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 1207,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 57,
+          "cost_usd": 0.0001692,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 1051,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 46,
+          "cost_usd": 0.00016335,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 1286,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 47,
+          "cost_usd": 0.0001638,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 844,
+          "host": "Amazon Bedrock",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 46,
+          "cost_usd": 0.0001626,
+          "error": null
+        }
+      ]
+    },
+    {
+      "tag": "together",
+      "provider_name": "Together",
+      "quantization": "unknown",
+      "reference": false,
+      "listed_per_mtok": [
+        0.15,
+        0.6
+      ],
+      "uptime_last_30m": 100,
+      "measured": true,
+      "calls": 10,
+      "calls_tool_ok": 10,
+      "calls_host_ok": 10,
+      "calls_error": 0,
+      "p50_ms": 1186.5,
+      "max_ms": 3075,
+      "mean_cost_usd": 0.000235215,
+      "q01": {
+        "ran": true,
+        "latencies_ms": [
+          18185,
+          13048
+        ],
+        "cost_usd": 0.00328725,
+        "hosts": [
+          "Together"
+        ],
+        "ok": true,
+        "files": [
+          "20261119-215418.json",
+          "20261119-215432.json"
+        ],
+        "error": null,
+        "errors": []
+      },
+      "tools_work": true,
+      "spent_usd": 0.005639399999999999,
+      "calls_detail": [
+        {
+          "kind": "router",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 745,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 49,
+          "cost_usd": 0.0001908,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 665,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 56,
+          "cost_usd": 0.00019455,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 650,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 48,
+          "cost_usd": 0.0001905,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 819,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 52,
+          "cost_usd": 0.00019275,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 685,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 50,
+          "cost_usd": 0.00019095,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 3075,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 323,
+          "cost_usd": 0.00032925,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 2330,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 251,
+          "cost_usd": 0.0002856,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 2793,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 311,
+          "cost_usd": 0.00032235,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 1554,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 116,
+          "cost_usd": 0.0002052,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 1845,
+          "host": "Together",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 192,
+          "cost_usd": 0.0002502,
+          "error": null
+        }
+      ]
+    },
+    {
+      "tag": "groq",
+      "provider_name": "Groq",
+      "quantization": "unknown",
+      "reference": false,
+      "listed_per_mtok": [
+        0.15,
+        0.6
+      ],
+      "uptime_last_30m": 100,
+      "measured": true,
+      "calls": 10,
+      "calls_tool_ok": 10,
+      "calls_host_ok": 10,
+      "calls_error": 0,
+      "p50_ms": 450.0,
+      "max_ms": 521,
+      "mean_cost_usd": 0.000170475,
+      "q01": {
+        "ran": true,
+        "latencies_ms": [
+          12943,
+          4630
+        ],
+        "cost_usd": 0.0033372,
+        "hosts": [
+          "Groq"
+        ],
+        "ok": true,
+        "files": [
+          "20261119-215457.json",
+          "20261119-215502.json"
+        ],
+        "error": null,
+        "errors": []
+      },
+      "tools_work": true,
+      "spent_usd": 0.00504195,
+      "calls_detail": [
+        {
+          "kind": "router",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 521,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 63,
+          "cost_usd": 0.00020025,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 484,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 70,
+          "cost_usd": 0.000204,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 395,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 59,
+          "cost_usd": 0.00012135,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 475,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 63,
+          "cost_usd": 0.0002004,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 512,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 77,
+          "cost_usd": 0.0002082,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 512,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 43,
+          "cost_usd": 0.0001638,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 343,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 48,
+          "cost_usd": 0.00016635,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 357,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 46,
+          "cost_usd": 0.0001659,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 425,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 45,
+          "cost_usd": 0.00016515,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 408,
+          "host": "Groq",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 49,
+          "cost_usd": 0.00010935,
+          "error": null
+        }
+      ]
+    },
+    {
+      "tag": "sambanova",
+      "provider_name": "SambaNova",
+      "quantization": "unknown",
+      "reference": false,
+      "listed_per_mtok": [
+        0.14,
+        0.95
+      ],
+      "uptime_last_30m": 100,
+      "measured": true,
+      "calls": 10,
+      "calls_tool_ok": 10,
+      "calls_host_ok": 10,
+      "calls_error": 0,
+      "p50_ms": 598.0,
+      "max_ms": 6942,
+      "mean_cost_usd": 0.000190371,
+      "q01": {
+        "ran": true,
+        "latencies_ms": [
+          15158,
+          5768
+        ],
+        "cost_usd": 0.00451606,
+        "hosts": [
+          "SambaNova"
+        ],
+        "ok": true,
+        "files": [
+          "20261119-215537.json",
+          "20261119-215544.json"
+        ],
+        "error": null,
+        "errors": []
+      },
+      "tools_work": true,
+      "spent_usd": 0.00641977,
+      "calls_detail": [
+        {
+          "kind": "router",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 1237,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 58,
+          "cost_usd": 0.00020574,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 672,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 72,
+          "cost_usd": 0.00021862,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 6942,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 58,
+          "cost_usd": 0.00020602,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 618,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 62,
+          "cost_usd": 0.00020968,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 695,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 78,
+          "cost_usd": 0.00022432,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 494,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 42,
+          "cost_usd": 0.00016548,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 512,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 46,
+          "cost_usd": 0.00016886,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 443,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 45,
+          "cost_usd": 0.00016861,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 578,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 40,
+          "cost_usd": 0.00016372,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 468,
+          "host": "SambaNova",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 50,
+          "cost_usd": 0.00017266,
+          "error": null
+        }
+      ]
+    },
+    {
+      "tag": "deepinfra/bf16",
+      "provider_name": "DeepInfra",
+      "quantization": "bf16",
+      "reference": true,
+      "listed_per_mtok": [
+        0.037,
+        0.16999999999999998
+      ],
+      "uptime_last_30m": 90,
+      "measured": true,
+      "calls": 10,
+      "calls_tool_ok": 10,
+      "calls_host_ok": 10,
+      "calls_error": 0,
+      "p50_ms": 5973.0,
+      "max_ms": 6691,
+      "mean_cost_usd": 4.03178e-05,
+      "q01": {
+        "ran": true,
+        "latencies_ms": [
+          48173,
+          28585
+        ],
+        "cost_usd": 0.0005191435000000001,
+        "hosts": [
+          "DeepInfra"
+        ],
+        "ok": true,
+        "files": [
+          "20261119-215730.json",
+          "20261119-215800.json"
+        ],
+        "error": null,
+        "errors": []
+      },
+      "tools_work": true,
+      "spent_usd": 0.0009223215000000001,
+      "calls_detail": [
+        {
+          "kind": "router",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 5928,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 58,
+          "cost_usd": 4.7489e-05,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 4254,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 82,
+          "cost_usd": 3.3698e-05,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 4058,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 67,
+          "cost_usd": 3.1333e-05,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 6431,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 75,
+          "cost_usd": 3.2656e-05,
+          "error": null
+        },
+        {
+          "kind": "router",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 6041,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "RoutingDecision",
+          "tool_ok": true,
+          "completion_tokens": 88,
+          "cost_usd": 5.2478e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q01",
+          "status": 200,
+          "latency_ms": 2697,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 45,
+          "cost_usd": 4.0617e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q03",
+          "status": 200,
+          "latency_ms": 2753,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 50,
+          "cost_usd": 4.1356e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q06",
+          "status": 200,
+          "latency_ms": 6622,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 50,
+          "cost_usd": 4.1541e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q09",
+          "status": 200,
+          "latency_ms": 6691,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 45,
+          "cost_usd": 4.0654e-05,
+          "error": null
+        },
+        {
+          "kind": "knowledge",
+          "case": "q10",
+          "status": 200,
+          "latency_ms": 6018,
+          "host": "DeepInfra",
+          "host_ok": true,
+          "finish_reason": "tool_calls",
+          "tool": "search_getnet_kb",
+          "tool_ok": true,
+          "completion_tokens": 50,
+          "cost_usd": 4.1356e-05,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "decision": {
+    "winner": "groq",
+    "kept": null,
+    "fastest": "groq",
+    "reason": "the cheapest of the 2 host(s) within 1.5x of the fastest (groq, p50 450 ms); 1 within 5% of the lowest cost, the faster of them",
+    "within": [
+      "groq",
+      "sambanova"
+    ],
+    "tied": [
+      "groq"
+    ]
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "summary": {
+    "cases": 1,
+    "provider_errors": 0,
+    "routing_accuracy": 1.0,
+    "tool_use_accuracy": 1.0,
+    "degraded_rate": 0.0,
+    "latency_ms_p50": 13048,
+    "latency_ms_p95": 13048,
+    "handoff_accuracy": 1.0,
+    "handoff_rate": 0.0,
+    "agent_tokens": 7623,
+    "judge_tokens": 0,
+    "agent_tokens_per_case_mean": 7623,
+    "agent_cost_usd": 0.00170325,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.00170325,
+    "tokens_by_model": [
+      {
+        "role": "agents",
+        "model": "openai/gpt-oss-120b",
+        "calls": 5,
+        "input_tokens": 6379,
+        "output_tokens": 1244,
+        "hosts": [
+          "Together"
+        ],
+        "cost_usd": 0.00170325
+      }
+    ],
+    "commit": "98f869f2cd1419bde335c299645b23c75ca3cad6",
+    "tree_clean": true,
+    "replan_max": 0,
+    "rag_mode": "dense",
+    "verifier_mode": "statements",
+    "approvals": "off (eval)",
+    "fallback_provider": "off (eval)",
+    "agent_provider": "openrouter",
+    "judge_provider": "openrouter",
+    "openrouter_provider_order": "openai/gpt-oss-120b=together; qwen/qwen3.8-27b=alibaba",
+    "openrouter_allow_fallbacks": false,
+    "label": "host together"
+  },
+  "rows": [
+    {
+      "id": "q01_compare_plans",
+      "message": "What's the difference between the Get Clássica and the Get Smart?",
+      "plan": [
+        "knowledge"
+      ],
+      "answer": "In short, **Get Clássica** is a straightforward payment‑only terminal, while **Get Smart** adds Android‑based inventory/sales management and API integration for businesses that need more than just card acceptance.",
+      "tools_called": [
+        "search_getnet_kb"
+      ],
+      "evidence": [
+        "[search_getnet_kb] [1] (relevance=0.37) The perfect point of sale begins with our POS <https://www.getnet.net/en/our-solutions/in-person-payments>\nThe perfect point of sale begins with our POS\n\n## Get Classic\n\nThe basic POS for your sales.\n\n* All our terminals comply with PCI security standards to make your transactions secure\n* Get paid anywhere in your business in order to offer more comfort and a seanless experience\n* IIt's reliadble, intuitive and allows you to start selling fast.\n* Acceot chip card, magnetic stripe, contactless and mobiile payments\n\n## Get Smart\n\nThe POS to make your business grow.\n\n* From entering the stock to closing the cashier, everything is integrated.\n* Debit, credit card, vouchers, payment by approximation or via apps. The customer chooses the best way to pay.\n* Provide a new experience for your costumers with the Android system.\n* You can integrate the best API that fits your type of business\n\nGet Tap\n\n## Turn your smartphone into a tap-to-pay system\n\n### Fast & Easy\n\nAccept payments on your Android mobile or NFC-enabled tablet. No additional hardware or equipment required.\n\n[2] (relevance=0.37) Quer taxas menores para o seu CNPJ? <https://site.getnet.com.br/taxas-personalizadas-eye>\nQuer taxas menores para o seu CNPJ?\n\n### Escolha sua maquininha\n\nVocê tem  R$ de desconto  no **aluguel** de suas maquininhas.\n\nRecomendada\n\nGet Mini\n\nPara quem está começando\n\nR$29,90\n\np/mês\n\nGrátis\n\nGanhe o link Get Pay + WhatsApp Business gratuitamente\n\nWi-fi e chip com plano de dados gratuitos\n\nComprovante via SMS\n\nAproximação, Pix e QR Code\n\nquero a get mini   pedir com ajuda\n\nGet Clássica\n\nCom bobina e sustentável\n\nR$79,90\n\nComprovante impresso\n\nquero a get clássica   pedir com ajuda\n\nGet Smart+ Eye\n\nA mais moderna e completa\n\nR$129,90\n\nGestão de vendas e estoque\n\nHabilitada para contratação do Aplicativo Eye - R$49,90 mês\n\nquero a get smart + eye   pedir com ajuda\n\nfale no whatsapp   ou ligue 4002-4000\n\nJá sou cliente Getnet\n\nver taxas\n\n[3] (relevance=0.36) Com o Get Tap você prepara seu negócio para Black Friday <https://site.getnet.com.br/get-tap>\nCom o Get Tap você prepara seu negócio para Black Friday\n\n**Get Tap**\n Grátis\n\n**Link de Pagamento**\n\n**Get Mini**\nR$ 14,90/mês\n\n**Get Clássica**\n R$ 79,90/mês\n\n**Get Smart**\n R$ 129,90/mês\n\n[4] (relevance=0.34) wp content > uploads > 2025 > 09 > Manul GetSmart.pdf <https://site.getnet.com.br/wp-content/uploads/2025/09/Manul-GetSmart.pdf>\nwp content > uploads > 2025 > 09 > Manul GetSmart.pdf\n\nPara sua segurança é importante ficar atento e seguir as dicas: Fim » › › Manual Get Smart 14 Índice « Em caso de dúvidas ou necessidade de suporte, acesse o Get Ajuda, o portal da Getnet onde é possível encontrar todas as orientação ou informações atualizadas.\n1.\tVídeos com instruções detalhadas sobre todas as soluções; 2.\tRespostas às principais dúvidas técnicas; 3.\tLink direto para download do Aplicativo Getnet Brasil; 4.\tManuais completos de todos os modelos de maquininhas.\nSuporte completo para sua Get Smart Acesse agora mesmo o Get Ajuda e veja as principais informações para o seu negócio.\nManual Get Smart 11 Get Ajuda Get Ajuda Acesse o Get Ajuda FAQ com as principais dúvidas e tutoriais Vídeo tutoriais Soluções de erros sistêmicos Links com os principais canais Getnet Informações importantes para o seu negócio Fim » › ›\n\n[5] (relevance=0.34) wp content > uploads > 2025 > 09 > Manul GetSmart.pdf <https://site.getnet.com.br/wp-content/uploads/2025/09/Manul-GetSmart.pdf>\nwp content > uploads > 2025 > 09 > Manul GetSmart.pdf\n\nÚltima atualização: Junho/2025.\nManual Get Smart Manual Get Smart 2 Índice Índice Como fazer o fechamento de vendas 09 Como fazer a antecipação de vendas 08 Get Ajuda 11 Como reimprimir o comprovante de venda 06 Como fazer um estorno 05 Como fazer uma venda 04 Formas de pagamento 03 Configurações da Get Smart 02 Principais informações 01 Como conferir suas últimas vendas 07 Dicas de segurança 10 Fim » › › Índice « Manual Get Smart 3 Índice « Principais informações 01 Principais informações O que vem na caixa O que significa cada ícone Get Smart Maquininha de cartão Getnet Carregador Carregador bivolt original da maquininha Chip 4G Com plano de dados gratuitos ■Tela touchscreen; ■Leitor de chip; ■Leitor de terja magnética; ■Leitor integrado sem-contato (NFC); ■Comunicação 4G, Wi-Fi e Bluetooth."
+      ],
+      "verify_note": "revised:5 [Get Clássica – the basic, entry‑level terminal. | Simple, reliable and intuitive; lets you start selling quickly. | No built‑in inventory or sales‑management features. | Get Smart – the advanced, all‑in‑one solution for growing businesses. | Touch‑screen, 4G/Wi‑Fi/Bluetooth connectivity and no printer (receipts can be se]",
+      "verify_raw": "{\"statements\": [{\"statement\": \"Get Clássica – the basic, entry‑level terminal.\", \"evidence_quote\": \"\", \"quote_found\": false}, {\"statement\": \"Simple, reliable and intuitive; lets you start selling quickly.\", \"evidence_quote\": \"\", \"quote_found\": false}, {\"statement\": \"Accepts chip, magnetic‑stripe, contactless and mobile payments.\", \"evidence_quote\": \"* Acceot chip card, magnetic stripe, contactless and mobiile payments\", \"quote_found\": true}, {\"statement\": \"Prints receipts (has a built‑in printer).\", \"evidence_quote\": \"Comprovante impresso\", \"quote_found\": true}, {\"statement\": \"No built‑in inventory or sales‑management features.\", \"evidence_quote\": \"\", \"quote_found\": false}, {\"statement\": \"Get Smart – the advanced, all‑in‑one solution for growing businesses.\", \"evidence_quote\": \"\", \"quote_found\": false}, {\"statement\": \"Runs on Android, offering a richer user experience and the ability to install additional apps.\", \"evidence_quote\": \"Provide a new experience for your costumers with the Android system.\", \"quote_found\": true}, {\"statement\": \"Integrates stock control, sales‑closing and other management functions directly in the device.\", \"evidence_quote\": \"From entering the stock to closing the cashier, everything is integrated.\", \"quote_found\": true}, {\"statement\": \"Supports the same payment methods as Classic plus integration with APIs and the Eye app for advanced sales‑and‑inventory management.\", \"evidence_quote\": \"You can integrate the best API that fits your type of business\", \"quote_found\": true}, {\"statement\": \"Touch‑screen, 4G/Wi‑Fi/Bluetooth connectivity and no printer (receipts can be sent digitally).\", \"evidence_quote\": \"\", \"quote_found\": false}]}",
+      "tool_calls": [
+        {
+          "agent": "knowledge",
+          "name": "search_getnet_kb",
+          "args": {
+            "query": "Get Clássica Get Smart difference"
+          }
+        }
+      ],
+      "replans": [],
+      "routing_ok": true,
+      "tools_ok": true,
+      "degraded": false,
+      "latency_ms": 13048,
+      "handoff": null,
+      "handoff_ok": true,
+      "usage": {
+        "input_tokens": 6379,
+        "output_tokens": 1244,
+        "total_tokens": 7623,
+        "cost_usd": 0.00170325,
+        "cost_source": "provider",
+        "by_node": [
+          {
+            "node": "router",
+            "model": "openai/gpt-oss-120b",
+            "host": "Together",
+            "calls": 1,
+            "latency_ms": 780,
+            "input_tokens": 1076,
+            "output_tokens": 49,
+            "cost_usd": 0.0001908,
+            "cost_source": "provider"
+          },
+          {
+            "node": "knowledge",
+            "model": "openai/gpt-oss-120b",
+            "host": "Together",
+            "calls": 2,
+            "latency_ms": 6548,
+            "input_tokens": 2990,
+            "output_tokens": 626,
+            "cost_usd": 0.0008240999999999999,
+            "cost_source": "provider"
+          },
+          {
+            "node": "verify",
+            "model": "openai/gpt-oss-120b",
+            "host": "Together",
+            "calls": 2,
+            "latency_ms": 5479,
+            "input_tokens": 2313,
+            "output_tokens": 569,
+            "cost_usd": 0.00068835,
+            "cost_source": "provider"
+          }
+        ]
+      }
+    }
+  ]
+}

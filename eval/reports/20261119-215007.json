@@ -1,0 +1,26 @@
+{
+  "summary": {
+    "cases": 0,
+    "provider_errors": 1,
+    "commit": "98f869f2cd1419bde335c299645b23c75ca3cad6",
+    "tree_clean": true,
+    "replan_max": 0,
+    "rag_mode": "dense",
+    "verifier_mode": "statements",
+    "approvals": "off (eval)",
+    "fallback_provider": "off (eval)",
+    "agent_provider": "openrouter",
+    "judge_provider": "openrouter",
+    "openrouter_provider_order": "openai/gpt-oss-120b=dekallm/bf16; qwen/qwen3.8-27b=alibaba",
+    "openrouter_allow_fallbacks": false,
+    "label": "host dekallm/bf16"
+  },
+  "rows": [
+    {
+      "id": "q01_compare_plans",
+      "message": "What's the difference between the Get Clássica and the Get Smart?",
+      "provider_error": "router: OpenAIModelNotFoundError: Error code: 404 - No endpoints found for openai/gpt-oss-120b. Every candidate endpoint was removed during routing: Filter by Tool Comp",
+      "latency_ms": 10468
+    }
+  ]
+}
