@@ -58,8 +58,9 @@ services:
     environment:
       <<: [*models, *auth]
       WEB_CONCURRENCY: "1"   # one worker only (rate limit and key cache in the process, conversations in one SQLite file)
-      # if the primary provider has an outage (5xx, 429, timeout) the same model on Groq answers instead (needs GROQ_API_KEY); "" = no failover
-      FALLBACK_PROVIDER: ${FALLBACK_PROVIDER-groq}
+      # if the primary provider has an outage (5xx, 429, timeout) the same model on Fireworks answers instead (needs FIREWORKS_API_KEY); "" = no failover.
+      # Not Groq: the agents' host on OpenRouter is Groq, so it would not be independent of the primary
+      FALLBACK_PROVIDER: ${FALLBACK_PROVIDER-fireworks}
     depends_on:
       keycloak:
         condition: service_healthy

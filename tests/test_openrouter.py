@@ -210,6 +210,25 @@ def test_openrouter_primary_with_groq_backup_is_wrapped_and_groq_gets_its_own_id
     assert model.fallbacks[0].model_name == OR_120  # Groq's id for gpt-oss-120b is the same string
 
 
+def test_openrouter_primary_with_fireworks_backup_calls_fireworks_directly_with_its_own_id(env, monkeypatch):
+    monkeypatch.setenv("FIREWORKS_API_KEY", "fw_test_not_real")
+    env(FALLBACK_PROVIDER="fireworks")
+    model = get_llm(model=OR_120)
+    backup = model.fallbacks[0]
+    assert isinstance(model, RunnableWithFallbacks) and isinstance(model.runnable, ChatOpenAI) and isinstance(backup, ChatOpenAI)
+    assert backup.openai_api_base == "https://api.fireworks.ai/inference/v1" and backup.model_name == FW_120
+    assert backup.openai_api_key.get_secret_value() == "fw_test_not_real"
+    assert model.runnable.openai_api_base == OPENROUTER_BASE_URL  # two ChatOpenAI, two different services
+
+
+def test_the_failover_of_the_api_is_fireworks_and_the_eval_keeps_it_off():
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert re.search(r"^FALLBACK_PROVIDER=fireworks\s*$", example, re.M)
+    assert "FALLBACK_PROVIDER: ${FALLBACK_PROVIDER-fireworks}" in compose
+    assert 'FALLBACK_PROVIDER: ""' in compose  # the eval service: a measurement runs on one provider
+
+
 def test_groq_primary_with_openrouter_backup_is_wrapped(env):
     env(AGENT_PROVIDER="groq", FALLBACK_PROVIDER="openrouter")
     model = get_llm(model=OR_120)
