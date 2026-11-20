@@ -272,6 +272,21 @@ def test_q01_is_not_ok_when_the_plan_the_tool_or_the_host_differ(monkeypatch, tm
     assert hl.run_q01(EP)["ok"] is False
 
 
+def test_notes_written_by_hand_are_kept_in_the_json_and_shown_and_the_header_says_so(tmp_path, monkeypatch):
+    h = hl.summarize_host(EP, ten_calls([100] * 10), Q01_OK)
+    report = {"at_utc": "2026-11-19 22:00:00", "commit": "a" * 40, "tree_clean": True, "cap_usd": 0.1, "spent_usd": 0.0027, "endpoints": [], "candidates": [],
+              "hosts": [h], "decision": hl.decide([h])}
+    plain = hl.render(report)
+    assert "Nothing below is typed by hand._" in plain and "## Notes" not in plain
+    report["notes"] = ["an earlier attempt was deleted"]
+    text = hl.render(report)
+    assert "except the Notes at the end" in text and "## Notes (written by hand after the run)" in text and "- an earlier attempt was deleted" in text
+    saved = tmp_path / "HOST-LATENCY-x.json"
+    saved.write_text(json.dumps(report), encoding="utf-8")
+    assert hl.main(["--rerender", str(saved)]) == 0
+    assert (tmp_path / "HOST-LATENCY-x.md").read_text(encoding="utf-8").strip() == text.strip()
+
+
 def test_the_report_is_generated_from_the_measurement_and_names_the_winner():
     h = hl.summarize_host(EP, ten_calls([100] * 10), Q01_OK)
     endpoints = [endpoint("crusoe/bf16", name="Crusoe"), endpoint("x/fp4", quant="fp4")]
