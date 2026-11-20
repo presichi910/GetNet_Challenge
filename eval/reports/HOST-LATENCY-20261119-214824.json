@@ -1679,5 +1679,9 @@
     "tied": [
       "groq"
     ]
-  }
+  },
+  "notes": [
+    "The first attempt of this measurement crashed on its first host (dekallm/bf16) before saving anything. Its two raw JSON files (eval/reports/20261119-214354.json and 20261119-214418.json, each one q01 run that ended in the router's 404 and recorded no usage), their per-run reports and the REPEATS report of that attempt were deleted on 2026-11-19 by the owner's decision, so they are not in the repository. The result for that host in this report comes from the complete re-run; the real cost of the lost attempt, US$0.000974, is counted above.",
+    "The eight REPEATS-*.md files next to this report (REPEATS-20261119-215007 to -215800) are the summaries of the two q01 runs of each host, as run_eval wrote them."
+  ]
 }
