@@ -80,6 +80,82 @@ def test_the_default_host_is_one_measurement_when_it_is_a_candidate_and_no_refer
     assert hl.plan_hosts([endpoint("cand/bf16")]) == [(endpoint("cand/bf16"), False)]
 
 
+# ---- the incumbent (amendment 1b and its clarification): it stays if it passes, another replaces it only if it fails ----
+
+def test_the_incumbent_stays_when_it_passes_even_if_another_host_is_cheaper_and_faster():
+    hosts = [host("incumbent", 1400, 0.0010), host("fast_cheap", 1000, 0.0002)]
+    d = hl.decide(hosts, "incumbent")
+    assert d["winner"] == "incumbent" and d["incumbent_passes"] is True and d["unconditional_winner"] == "fast_cheap" and "it stays" in d["reason"]
+    assert hl.decide(hosts)["winner"] == "fast_cheap"  # without an incumbent the rule picks the other one
+
+
+def test_the_incumbent_at_exactly_one_and_a_half_times_the_fastest_still_passes():
+    assert hl.decide([host("inc", 1500, 0.01), host("fast", 1000, 0.0001)], "inc")["winner"] == "inc"
+    assert hl.decide([host("inc", 1501, 0.01), host("fast", 1000, 0.0001)], "inc")["winner"] == "fast"
+
+
+def test_the_incumbent_whose_tools_fail_is_replaced_by_the_rules_choice_among_the_others():
+    hosts = [host("inc", 100, 0.0001, tools_work=False), host("dear", 1000, 0.0020), host("cheap_enough", 1200, 0.0005), host("too_slow", 1600, 0.0001)]
+    d = hl.decide(hosts, "inc")
+    assert d["winner"] == "cheap_enough" and d["incumbent_passes"] is False and "tools do not work" in d["reason"]
+
+
+def test_a_too_slow_incumbent_is_replaced_and_the_bar_is_the_fastest_of_the_hosts_that_pass():
+    d = hl.decide([host("inc", 3000, 0.0001), host("fast", 1000, 0.0010), host("mid", 1400, 0.0005)], "inc")
+    assert d["winner"] == "mid" and "above 1.5x the fastest (fast)" in d["reason"]
+
+
+def test_an_incumbent_that_was_not_a_candidate_or_not_measured_fails_the_rule():
+    ref = {**host("inc", 100, 0.00001), "reference": True}
+    assert "not a candidate that day" in hl.decide([ref, host("other", 1000, 0.001)], "inc")["reason"]
+    assert hl.decide([ref, host("other", 1000, 0.001)], "inc")["winner"] == "other"
+    d = hl.decide([host("other", 1000, 0.001)], "absent")
+    assert d["winner"] == "other" and "not measured" in d["reason"]
+
+
+def test_if_the_incumbent_fails_and_nothing_else_passes_it_stays():
+    d = hl.decide([host("inc", 100, 0.001, tools_work=False), host("x", 100, 0.001, tools_work=False)], "inc")
+    assert d["winner"] is None and d["kept"] == "inc" and "no other host passes" in d["reason"]
+    assert hl.decide([], "inc")["kept"] == "inc"
+
+
+def test_no_incumbent_is_the_unconditional_rule_of_the_19th():
+    hosts = [host("a", 1000, 0.002), host("b", 1100, 0.001)]
+    assert hl.decide(hosts) == hl.decide(hosts, None) and hl.decide(hosts)["winner"] == "b"
+
+
+def test_the_incumbent_defaults_to_the_pinned_host_and_none_turns_it_off(tmp_path, monkeypatch, capsys):
+    from app.config import get_settings
+
+    monkeypatch.setenv("OPENROUTER_PROVIDER_ORDER", '{"openai/gpt-oss-120b": ["crusoe/bf16"]}')
+    get_settings.cache_clear()
+    assert hl.default_incumbent() == "crusoe/bf16" and hl.default_incumbent("qwen/qwen3.8-27b") is None
+    saved = tmp_path / "m.json"
+    saved.write_text(json.dumps({"hosts": [host("crusoe/bf16", 1400, 0.001), host("faster", 1000, 0.0002)]}), encoding="utf-8")
+    assert hl.main(["--decide", str(saved)]) == 0
+    assert json.loads(capsys.readouterr().out)["winner"] == "crusoe/bf16"  # the incumbent of the settings passes
+    assert hl.main(["--decide", str(saved), "--incumbent", "none"]) == 0
+    assert json.loads(capsys.readouterr().out)["winner"] == "faster"
+    assert hl.main(["--decide", str(saved), "--incumbent", "faster"]) == 0
+    assert json.loads(capsys.readouterr().out)["winner"] == "faster"
+    get_settings.cache_clear()
+
+
+def test_the_incumbent_is_measured_as_a_reference_when_the_filter_leaves_it_out():
+    eps = [endpoint("cand/bf16"), endpoint("inc", uptime=90.0), endpoint(hl.DEFAULT_HOST, uptime=90.0)]
+    plan = [(e["tag"], ref) for e, ref in hl.plan_hosts(eps, "inc")]
+    assert plan == [("cand/bf16", False), (hl.DEFAULT_HOST, True), ("inc", True)]
+    assert [(e["tag"], r) for e, r in hl.plan_hosts([endpoint("inc"), endpoint("cand/bf16")], "inc")] == [("inc", False), ("cand/bf16", False)]  # a candidate is measured once, not as a reference
+
+
+def test_the_report_says_whether_the_incumbent_passes_and_what_the_unconditional_winner_would_have_been():
+    hosts = [hl.summarize_host(endpoint("inc", name="Inc"), ten_calls([1400] * 10), Q01_OK), hl.summarize_host(endpoint("fast", name="Fast"), ten_calls([1000] * 10), Q01_OK)]
+    report = {"at_utc": "2026-11-21 10:00:00", "commit": "a" * 40, "tree_clean": True, "cap_usd": 0.1, "spent_usd": 0.01, "endpoints": [], "candidates": [], "hosts": hosts,
+              "decision": hl.decide(hosts, "inc")}
+    text = hl.render(report)
+    assert "Incumbent (amendment 1b): `inc`, **passes the rule and stays**" in text and "would have been `fast`" in text
+
+
 def test_the_spending_cap():
     assert hl.can_afford(0.0, 0.01) and hl.can_afford(0.09, 0.01) and not hl.can_afford(0.095, 0.01)
 

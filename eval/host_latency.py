@@ -3,10 +3,12 @@
     python -m eval.host_latency --list                 # the candidates, with why each is in or out (public endpoint, free)
     python -m eval.host_latency                        # measure every candidate (cap US$0.10) and write eval/reports/HOST-LATENCY-<stamp>.{json,md}
     python -m eval.host_latency --decide FILE.json     # apply the rule again to a saved measurement (no calls)
+    python -m eval.host_latency --incumbent none       # the unconditional winner (the default is the host pinned in the settings: amendment 1b)
 
 Per candidate host: 10 calls (5 of the router and 5 of the knowledge agent, with the real prompts and tool schemas, on the messages of the regular cases
 q01 q03 q06 q09 q10), ONE attempt each (no client retries: a stall is data), then `q01` complete twice through `eval.run_eval`. The rule picks the cheapest host
-whose p50 is within 1.5 times the fastest and whose tools work in every call; a tie (costs within 5 %) goes to the faster. The key is used only in the
+whose p50 is within 1.5 times the fastest and whose tools work in every call; a tie (costs within 5 %) goes to the faster. With an INCUMBENT (amendment 1b, clarification of 2026-11-19: C1 and C3 must run on the same host) the host
+pinned stays if it passes that rule, and another replaces it only if it fails. The key is used only in the
 Authorization header: it is never stored, and neither is a request header or a message text.
 """
 from __future__ import annotations
@@ -77,16 +79,26 @@ def candidates(endpoints: list[dict]) -> list[dict]:
     return out
 
 
-def plan_hosts(endpoints: list[dict]) -> list[tuple[dict, bool]]:
-    """(endpoint, is_reference) in measuring order: the candidates, cheapest first, then (amendment 1a) the previously pinned host as a REFERENCE when it is not a candidate.
-    A reference is measured the same way, listed apart, and never enters the decision."""
+def plan_hosts(endpoints: list[dict], incumbent: str | None = None) -> list[tuple[dict, bool]]:
+    """(endpoint, is_reference) in measuring order: the candidates, cheapest first, then (amendment 1a) the previously pinned host, and the incumbent, as REFERENCES when they are not candidates.
+    A reference is measured the same way, listed apart, and never enters the decision (an incumbent that is not a candidate that day fails the rule)."""
     cands = candidates(endpoints)
     plan = [(e, False) for e in cands]
-    if DEFAULT_HOST not in {e["tag"] for e in cands}:
-        reference = next((e for e in endpoints if e.get("tag") == DEFAULT_HOST), None)
-        if reference is not None:
-            plan.append((reference, True))
+    tags = {e["tag"] for e in cands}
+    for tag in dict.fromkeys([DEFAULT_HOST, incumbent]):
+        if tag and tag not in tags:
+            reference = next((e for e in endpoints if e.get("tag") == tag), None)
+            if reference is not None:
+                plan.append((reference, True))
     return plan
+
+
+def default_incumbent(model: str = MODEL) -> str | None:
+    """The host pinned in the settings for the model (OPENROUTER_PROVIDER_ORDER): the incumbent of amendment 1b."""
+    from app.config import get_settings
+
+    order = get_settings().openrouter_provider_order.get(model) or []
+    return order[0] if order else None
 
 
 # ---------------------------------------------------------------------------------------------- requests
@@ -250,9 +262,36 @@ def summarize_host(endpoint: dict, calls: list[dict], q01: dict, reference: bool
     }
 
 
-def decide(hosts: list[dict]) -> dict:
+def decide(hosts: list[dict], incumbent: str | None = None) -> dict:
     """The rule. Pool = the measured candidates (never the reference) whose tools work in every call. The fastest is the lowest p50 in the pool. Among the pool hosts within 1.5 times the fastest, the cheapest wins;
-    costs within 5 % of the cheapest are a tie and the faster p50 wins. No host in the pool = the default stays."""
+    costs within 5 % of the cheapest are a tie and the faster p50 wins. No host in the pool = the default stays.
+
+    With an `incumbent` (amendment 1b): it STAYS if it passes the rule, that is, it is in the pool and its p50 is within 1.5 times the fastest of the pool, even when another host is cheaper or faster.
+    If it fails, the host is the rule's choice among the others; if none passes, the incumbent stays."""
+    if incumbent:
+        unconditional = decide(hosts)
+        pool = [h for h in hosts if h.get("measured") and not h.get("reference") and h["tools_work"] and h["p50_ms"] is not None and h["mean_cost_usd"] is not None]
+        mine = next((h for h in pool if h["tag"] == incumbent), None)
+        fastest = min(pool, key=lambda h: h["p50_ms"]) if pool else None
+        if mine is not None and fastest is not None and mine["p50_ms"] <= TOLERANCE * fastest["p50_ms"]:
+            return {**unconditional, "winner": incumbent, "kept": None, "incumbent": incumbent, "incumbent_passes": True, "unconditional_winner": unconditional["winner"],
+                    "reason": f"the incumbent {incumbent} passes the rule (tools work in every call, p50 {mine['p50_ms']:.0f} ms is within {TOLERANCE}x of the fastest, "
+                              f"{fastest['tag']} at {fastest['p50_ms']:.0f} ms): it stays; the unconditional winner would have been {unconditional['winner']}"}
+        known = next((h for h in hosts if h["tag"] == incumbent), None)
+        if known is None or not known.get("measured"):
+            why = "it was not measured (not a candidate that day, or beyond the cap)"
+        elif known.get("reference"):
+            why = "it is not a candidate that day (quantization, tools or uptime of the filter)"
+        elif not known["tools_work"]:
+            why = "its tools do not work in every call"
+        else:
+            why = f"its p50 ({known['p50_ms']:.0f} ms) is above {TOLERANCE}x the fastest ({fastest['tag'] if fastest else '-'})"
+        rest = decide([h for h in hosts if h["tag"] != incumbent])
+        base = {"incumbent": incumbent, "incumbent_passes": False, "unconditional_winner": unconditional["winner"]}
+        if rest["winner"] is None:
+            return {**rest, **base, "winner": None, "kept": incumbent,
+                    "reason": f"the incumbent {incumbent} fails the rule ({why}) and no other host passes: it stays"}
+        return {**rest, **base, "reason": f"the incumbent {incumbent} fails the rule ({why}); {rest['reason']}"}
     pool = [h for h in hosts if h.get("measured") and not h.get("reference") and h["tools_work"] and h["p50_ms"] is not None and h["mean_cost_usd"] is not None]
     if not pool:
         return {"winner": None, "kept": DEFAULT_HOST, "fastest": None, "reason": "no measured host has tools working in every call: the pinned default stays",
@@ -285,6 +324,9 @@ def render(report: dict) -> str:
          f"- Candidates: {len(report['candidates'])} of {len(report['endpoints'])} endpoints listed; measured: {sum(1 for h in report['hosts'] if h['measured'])}.", ""]
     d = report["decision"]
     L += ["## Decision", "", f"**Winner: `{d['winner']}`**" if d["winner"] else f"**No winner: `{d['kept']}` stays.**", "", f"_{d['reason']}._", ""]
+    if d.get("incumbent"):
+        L += [f"Incumbent (amendment 1b): `{d['incumbent']}`, **{'passes the rule and stays' if d['incumbent_passes'] else 'fails the rule'}**. "
+              f"The unconditional winner of the rule would have been `{d.get('unconditional_winner')}`.", ""]
     L += ["## Measured hosts (candidates cheapest listed price first, then the reference)", "",
           "_A host marked (reference) is the previously pinned one, measured only to compare: it is not a candidate, never sets the bar and cannot win (amendment 1a)._", "",
           "| host | quant | listed in/out per M | uptime | tool ok /10 | host ok /10 | errors | p50 ms | max ms | mean cost per call | q01 x2 ms | q01 ok | tools work | within 1.5x | tied |",
@@ -337,6 +379,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--list", action="store_true", help="list the candidates and stop (public endpoint, no key, no cost)")
     parser.add_argument("--decide", metavar="FILE", help="apply the rule to a saved measurement (no calls)")
+    parser.add_argument("--incumbent", metavar="TAG", default=None,
+                        help="the host that stays if it passes the rule (amendment 1b); default: the host pinned in the settings; 'none' = the unconditional winner")
     parser.add_argument("--rerender", metavar="FILE", help="write the .md of a saved measurement again from its JSON (no calls); use it after editing `notes`")
     parser.add_argument("--cap", type=float, default=CAP_USD, help="spending cap in USD (default 0.10)")
     parser.add_argument("--prior-spend", type=float, default=0.0, metavar="USD",
@@ -348,14 +392,15 @@ def main(argv: list[str] | None = None) -> int:
         path.with_suffix(".md").write_text(render(json.loads(path.read_text(encoding="utf-8"))) + "\n", encoding="utf-8")
         print(f"wrote {path.with_suffix('.md')}")
         return 0
+    incumbent = None if (args.incumbent or "").lower() == "none" else (args.incumbent or default_incumbent())
     if args.decide:
         report = json.loads(Path(args.decide).read_text(encoding="utf-8"))
-        report["decision"] = decide(report["hosts"])
+        report["decision"] = decide(report["hosts"], incumbent)
         print(json.dumps(report["decision"], indent=2))
         return 0
     endpoints = fetch_endpoints()
     cands = candidates(endpoints)
-    plan = plan_hosts(endpoints)
+    plan = plan_hosts(endpoints, incumbent)
     if args.list:
         for row in endpoint_rows(endpoints):
             print(f"{'IN ' if row['eligible'] else 'out'} {row['tag']:34s} quant={row['quantization']:8s} uptime={row['uptime']} tools={row['tools']} ({row['reason']})")
@@ -379,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
     def save() -> None:  # after every host: a crash must not lose what was measured
         report = {"at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), "commit": state["commit"], "tree_clean": state["tree_clean"], "cap_usd": args.cap,
                   "model": MODEL, "rule": "docs/PREREG_PLAN96.md, Enmienda 1", "spent_usd": spent, "prior_spend_usd": args.prior_spend, "endpoints": endpoint_rows(endpoints),
-                  "candidates": [c["tag"] for c in cands], "reference": [e["tag"] for e, ref in plan if ref], "hosts": hosts, "decision": decide(hosts)}
+                  "candidates": [c["tag"] for c in cands], "reference": [e["tag"] for e, ref in plan if ref], "hosts": hosts, "incumbent": incumbent, "decision": decide(hosts, incumbent)}
         (REPORTS / f"HOST-LATENCY-{stamp}.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (REPORTS / f"HOST-LATENCY-{stamp}.md").write_text(render(report) + "\n", encoding="utf-8")
     with httpx.Client() as client:
@@ -398,7 +443,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"   p50 {host['p50_ms']} ms, tools work: {host['tools_work']}, cost so far US${spent:.4f}", flush=True)
             save()
     save()
-    decision = decide(hosts)
+    decision = decide(hosts, incumbent)
     print(f"\nwrote eval/reports/HOST-LATENCY-{stamp}.json and .md: total real cost US${spent:.4f}; decision: {decision['winner'] or decision['kept']}")
     return 0
 
