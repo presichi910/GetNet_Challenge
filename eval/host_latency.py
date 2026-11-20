@@ -207,7 +207,7 @@ def run_q01(endpoint: dict) -> dict:
     env = dict(os.environ, AGENT_PROVIDER="openrouter", FALLBACK_PROVIDER="", PYTHONUTF8="1",
                OPENROUTER_PROVIDER_ORDER=json.dumps({MODEL: [endpoint["tag"]], "qwen/qwen3.8-27b": ["alibaba"]}))
     cmd = [sys.executable, "-X", "utf8", "-m", "eval.run_eval", "--regular-only", "--no-judge", "--only", "q01", "--repeats", "2",
-           "--label", label, "--keep-latest", "--require-clean"]
+           "--label", label, "--keep-latest", "--require-clean", "--no-cost-guard"]  # this harness has its own cap
     done = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=900)  # nosec B603
     out: dict = {"ran": done.returncode == 0, "latencies_ms": [], "cost_usd": 0.0, "hosts": [], "ok": False, "files": [], "error": None}
     if done.returncode != 0:

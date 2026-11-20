@@ -25,9 +25,11 @@ from datetime import datetime
 from pathlib import Path
 
 from eval.judge_budget import DAILY_LIMIT, MARGIN, BudgetedScorer, Ledger
+
 from eval.run_eval import _prices, judge_question, load_cases, render_report, summarize_all
 
 SKIP_KEYS = ("provider_error", "error")  # a row with no answer has nothing to judge
+NO_DAILY_LIMIT = 10**12  # tokens: OpenRouter has no daily cap on the judge; the spending is limited by the cost guard (eval/cost_guard.py), not by this ledger
 
 
 def judged_path(path: str | Path) -> Path:
@@ -128,10 +130,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--wait-until", metavar="'YYYY-MM-DD HH:MM'", help="at the daily limit, wait for the window to free and resume, until this local time")
     ap.add_argument("--wake-rows", type=int, default=8, help="with --wait-until: resume when there is room for this many rows")
     ap.add_argument("--dry-run", action="store_true", help="count the calls and the tokens, call nothing")
-    ap.add_argument("--daily-limit", type=int, default=DAILY_LIMIT)
+    ap.add_argument("--daily-limit", type=int, default=None,
+                    help=f"tokens per rolling 24 h. Default: {DAILY_LIMIT} when the judge runs on Groq (its free-tier cap), practically unlimited on OpenRouter")
+    ap.add_argument("--no-cost-guard", action="store_true", help="skip the cost guard (only for tests and for a judge that is not on OpenRouter)")
     ap.add_argument("--margin", type=int, default=MARGIN, help="stop this many tokens below the daily limit")
     ap.add_argument("--ledger", default=None, help="the ledger file (default eval/reports/judge_ledger.json)")
     args = ap.parse_args(argv)
+    if args.daily_limit is None:
+        from app.config import get_settings
+
+        args.daily_limit = DAILY_LIMIT if get_settings().judge_provider.lower() == "groq" else NO_DAILY_LIMIT
 
     only = args.only
     if args.sample:
@@ -156,6 +164,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run or not total:
         return 0
 
+    guard = ticket = None
+    if not args.no_cost_guard:  # the judge's calls cost money on OpenRouter: the estimate must fit the budget before the first one
+        from eval.cost_guard import CostGuard
+
+        guard = CostGuard()
+        ticket = guard.start(block="rejudge", command=" ".join(["python", "-m", "eval.rejudge", *(argv if argv is not None else __import__("sys").argv[1:])]),
+                             n_case_runs=total, include_agents=False)
+
     from eval.judge import Judge  # imported late: a dry run needs no key
 
     cases = {c["id"]: c for c in load_cases(None)}
@@ -167,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n{'ALL SCORED' if outcome['complete'] else 'STOPPED CLEAN: some rows are not scored yet (the window frees; run the same command again)'}")
     print(f"\njudge calls this run: {scorer.calls}, tokens: {scorer.tokens}, 24 h total: {ledger.spent()} of {args.daily_limit}, "
           f"{time.time() - started:.0f}s")
+    if guard is not None and ticket is not None:
+        guard.finish(ticket)
     return 0
 
 

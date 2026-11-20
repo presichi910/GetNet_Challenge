@@ -589,6 +589,8 @@ def main() -> None:
                     help="run another cases file with the same schema (sets EVAL_DATASET, which eval/rejudge.py also reads); latest.md is never replaced by such a run")
     ap.add_argument("--with-holdout-v3", action="store_true",
                     help="run eval/holdout_v3.jsonl (hv3_*) together with the dataset; its metrics stay in their own holdout group (sets EVAL_WITH_HOLDOUT_V3, which eval/rejudge.py also reads)")
+    ap.add_argument("--no-cost-guard", action="store_true",
+                    help="skip the cost guard (eval/cost_guard.py): only for tests and for runs that do not spend on OpenRouter. Without it, a run whose estimate does not fit the budget does not start")
     ap.add_argument("--inject-history", action="store_true",
                     help="the old way: earlier turns of a multi-turn case go in as context (no checkpointer, no restart)")
     args = ap.parse_args()
@@ -622,6 +624,15 @@ def main() -> None:
     cases = load_cases(args.only, regular_only=args.regular_only)
     models = current_models()
     print("Models:", ", ".join(f"{role}={name}" for role, name in models.items()))
+    guard = ticket = None
+    if not args.no_cost_guard:  # no run that spends on OpenRouter starts without passing the guard; it also leaves its estimate against its real cost in COST_LEDGER.md
+        import sys
+
+        from eval.cost_guard import CostGuard
+
+        guard = CostGuard()
+        ticket = guard.start(block=args.label or "run_eval", command=" ".join(["python", "-m", "eval.run_eval", *sys.argv[1:]]),
+                             n_case_runs=len(cases) * max(1, args.repeats), include_judge=not args.no_judge)
     if args.inject_history:
         service = ChatService(build_default_graph(keep_verify_raw=True))
     else:
@@ -633,9 +644,15 @@ def main() -> None:
                                          max(1, args.repeats), args.pause, retries=args.retries, models=models,
                                          update_latest=should_update_latest(args.only, args.keep_latest, args.label),
                                          config=config)
+    except BaseException:
+        if guard is not None and ticket is not None:
+            guard.finish(ticket, outcome="failed")  # a run that dies has still spent something
+        raise
     finally:
         if hasattr(service, "close"):
             service.close()
+    if guard is not None and ticket is not None:
+        guard.finish(ticket, reported_cost_usd=sum(d[1].get("total_cost_usd") or 0 for d in done))
     rows, summary, path = done[-1]
     print("\n=== SUMMARY (last run) ===")
     print(json.dumps(summary, indent=2))
