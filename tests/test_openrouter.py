@@ -51,7 +51,7 @@ def test_the_code_defaults_are_openrouter_and_gpt_oss_120b():
     assert (s.agent_provider, s.judge_provider) == ("openrouter", "openrouter")
     assert (s.llm_model, s.light_model, s.effective_support_model) == (OR_120, OR_120, OR_120)
     assert s.fallback_provider == "" and s.openrouter_allow_fallbacks is False
-    assert s.openrouter_provider_order == {OR_120: ["deepinfra/bf16"], "qwen/qwen3.8-27b": ["alibaba"]}
+    assert s.openrouter_provider_order == {OR_120: ["groq"], "qwen/qwen3.8-27b": ["alibaba"]}
 
 
 def test_env_example_and_compose_agree_with_the_code_defaults():
@@ -96,14 +96,14 @@ def test_an_agent_is_chatopenai_on_openrouter_pinned_to_its_host_with_no_fallbac
     assert isinstance(llm, ChatOpenAI) and not isinstance(llm, ChatGroq)
     assert llm.openai_api_base == OPENROUTER_BASE_URL and llm.model_name == OR_120
     assert llm.openai_api_key.get_secret_value() == "sk-or-test-not-real"
-    assert payload(llm)["extra_body"] == {"provider": {"allow_fallbacks": False, "order": ["deepinfra/bf16"]},
+    assert payload(llm)["extra_body"] == {"provider": {"allow_fallbacks": False, "order": ["groq"]},
                                           "reasoning": {"effort": "low"}}
-    assert llm.metadata["price_key"] == f"{OR_120}@deepinfra/bf16"
+    assert llm.metadata["price_key"] == f"{OR_120}@groq"
 
 
 def test_reasoning_effort_and_fallback_flag_come_from_settings(env):
     env(REASONING_EFFORT="medium", OPENROUTER_ALLOW_FALLBACKS="true")
-    assert payload(get_llm(model=OR_120))["extra_body"] == {"provider": {"allow_fallbacks": True, "order": ["deepinfra/bf16"]},
+    assert payload(get_llm(model=OR_120))["extra_body"] == {"provider": {"allow_fallbacks": True, "order": ["groq"]},
                                                             "reasoning": {"effort": "medium"}}
 
 
@@ -124,7 +124,7 @@ def test_a_fireworks_id_is_translated_and_the_translation_is_logged(env, caplog)
         llm = get_llm(model=FW_120)
         get_llm(model=FW_120)
     assert llm.model_name == OR_120
-    assert payload(llm)["extra_body"]["provider"]["order"] == ["deepinfra/bf16"]  # the translated id gets its host
+    assert payload(llm)["extra_body"]["provider"]["order"] == ["groq"]  # the translated id gets its host
     logged = [r.getMessage() for r in caplog.records if "Fireworks id" in r.getMessage()]
     assert len(logged) == 1 and FW_120 in logged[0] and OR_120 in logged[0]
     assert openrouter_model_name(OR_120) == OR_120  # an OpenRouter id is not touched and logs nothing

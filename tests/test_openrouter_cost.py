@@ -96,4 +96,4 @@ def test_cost_source_is_mixed_when_only_some_calls_report_a_cost():
 
 def test_the_price_table_prices_the_two_pinned_hosts():
     table = price_table()
-    assert table[f"{OR_120}@deepinfra/bf16"] == (0.037, 0.17) and table["qwen/qwen3.8-27b@alibaba"] == (0.425, 2.55)
+    assert table[f"{OR_120}@groq"] == (0.15, 0.60) and table["qwen/qwen3.8-27b@alibaba"] == (0.425, 2.55)

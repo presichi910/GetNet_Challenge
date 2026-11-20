@@ -102,11 +102,11 @@ def test_the_eval_summary_lists_the_hosts_that_answered_per_model():
 def test_the_run_config_says_what_was_asked_for_as_plain_values(env, monkeypatch):
     from eval.run_eval import run_config
 
-    monkeypatch.setenv("OPENROUTER_PROVIDER_ORDER", '{"openai/gpt-oss-120b": ["deepinfra/bf16"], "qwen/qwen3.8-27b": ["alibaba"]}')
+    monkeypatch.setenv("OPENROUTER_PROVIDER_ORDER", '{"openai/gpt-oss-120b": ["groq"], "qwen/qwen3.8-27b": ["alibaba"]}')
     get_settings.cache_clear()
     cfg = run_config()
     assert cfg["agent_provider"] == "openrouter" and cfg["judge_provider"] == "openrouter" and cfg["openrouter_allow_fallbacks"] is False
-    assert cfg["openrouter_provider_order"] == "openai/gpt-oss-120b=deepinfra/bf16; qwen/qwen3.8-27b=alibaba"
+    assert cfg["openrouter_provider_order"] == "openai/gpt-oss-120b=groq; qwen/qwen3.8-27b=alibaba"
     assert all(isinstance(v, (str, bool, int)) for v in cfg.values())  # flat values, like the keys it already had (no dict or list)
 
 

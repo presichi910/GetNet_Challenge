@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 AGENT_MODEL = "openai/gpt-oss-120b"
 JUDGE_MODEL = "qwen/qwen3.8-27b"
 # the host each call is expected to land on (the pins of app/config.py); `provider` in the response is its display name
-EXPECTED_HOST = {"agent": "deepinfra", "judge": "alibaba"}
+EXPECTED_HOST = {"agent": "groq", "judge": "alibaba"}
 # the prices the judge call could have been ESTIMATED with: the pinned host's, the model's listed price, the old Groq table's (USD per 1M tokens)
 JUDGE_PRICES = {"alibaba (the pinned host)": (0.425, 2.55), "listed model price": (0.06, 2.2), "old Groq table": (0.80, 4.00)}
 

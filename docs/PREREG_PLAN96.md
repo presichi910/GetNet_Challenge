@@ -108,3 +108,11 @@ tell whether the slowness of the first smoke belongs to that host or to our own 
 `q01` twice), as a **reference**: it is listed apart in the report, it never enters the decision, it is never "the fastest" that sets the bar, and it cannot win. If it does meet the
 filter at the time of the measurement it is simply a candidate, measured once. Its cost counts against the US$0.10 cap, and it is measured last.
 
+### Result of amendment 1 (19-nov, after the measurement)
+
+The rule was applied by code (`eval/host_latency.py`) to `eval/reports/HOST-LATENCY-20261119-214824.json` (the report is `.md`; versioned in `45c8a8e`; measured at commit `98f869f`, clean tree,
+real cost US$0.0211 of the US$0.10 cap). **The host of `openai/gpt-oss-120b` is `groq`**: p50 of 450 ms over 10 calls (the fastest), tools working in all 10 calls and in both `q01` runs, US$0.00017 per call;
+`sambanova` was within 1.5 times but dearer, `together` was 2.6 times the fastest. `dekallm/bf16`, `crusoe/bf16` and both `amazon-bedrock` endpoints answer the router's forced tool call with 404
+("Filter by Tool Compatibility"), so their tools do not work. The reference `deepinfra/bf16` (not a candidate that day: 90 % uptime) had a p50 of 5,973 ms with one attempt per call and no client retries.
+This result replaces the `deepinfra`, `bf16` row of "Fixed hosts" for the agents; the judge row stays. The default of `OPENROUTER_PROVIDER_ORDER` was changed to `groq` in its own commit.
+

@@ -40,9 +40,10 @@ DEFAULT_PRICES: dict[str, tuple[float, float]] = {
     "openai/gpt-oss-20b": (0.075, 0.30),   # Groq
     "qwen/qwen3.8-27b": (0.80, 4.00),      # Groq, the eval judge
     # OpenRouter: priced by the HOST the call is pinned to ("<model>@<first host of OPENROUTER_PROVIDER_ORDER>", set by app/llm.py), never by the
-    # list price of the model, which is another host's. Prices of 2026-11-19 from GET /api/v1/models/<id>/endpoints (docs/evidence/openrouter_models_*.json).
+    # list price of the model, which is another host's. Prices of 2026-11-19 from GET /api/v1/models/<id>/endpoints (docs/evidence/openrouter_models_*.json
+    # and the listed prices of eval/reports/HOST-LATENCY-20261119-214824.md).
     # They are only the estimate of a call that comes back without a cost: OpenRouter returns the real `usage.cost` and that one wins.
-    "openai/gpt-oss-120b@deepinfra/bf16": (0.037, 0.17),
+    "openai/gpt-oss-120b@groq": (0.15, 0.60),
     "qwen/qwen3.8-27b@alibaba": (0.425, 2.55),
 }
 NODES = ("summarize", "router", "knowledge", "support", "synthesizer", "observe", "verify", "handoff")

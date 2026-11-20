@@ -46,9 +46,10 @@ class Settings(BaseSettings):
     # failover. The same model under the other provider's id (app/llm.py::fallback_model_name). Needs its API key
     fallback_provider: str = ""
     # OpenRouter. Every model is pinned to ONE upstream host (a measurement must not move between hosts or between quantizations):
-    # JSON {model id: [provider slugs]}, sent as `provider.order`. A model not listed is not pinned (and a warning says so).
+    # JSON {model id: [provider slugs]}, sent as `provider.order`. gpt-oss-120b is on `groq`: the host the rule of docs/PREREG_PLAN96.md (amendment 1) picked
+    # from a measurement (eval/reports/HOST-LATENCY-20261119-214824.md); the judge's `alibaba` is the model's author. A model not listed is not pinned (and a warning says so).
     # `allow_fallbacks` false = a host that fails is an error, never another host. Setting this variable replaces the whole map.
-    openrouter_provider_order: dict[str, list[str]] = {"openai/gpt-oss-120b": ["deepinfra/bf16"], "qwen/qwen3.8-27b": ["alibaba"]}
+    openrouter_provider_order: dict[str, list[str]] = {"openai/gpt-oss-120b": ["groq"], "qwen/qwen3.8-27b": ["alibaba"]}
     openrouter_allow_fallbacks: bool = False
     llm_model: str = "openai/gpt-oss-120b"
     # router, synthesizer (unless SYNTH_MODEL is set), verifier, observe and summarizer
