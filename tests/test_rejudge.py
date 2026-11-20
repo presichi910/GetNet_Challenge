@@ -315,7 +315,7 @@ def test_sample_scores_only_the_fifteen_rows_and_replaces_one_the_run_lacks(tmp_
     judge = FakeJudge([])
     monkeypatch.setattr("eval.judge.Judge", lambda: judge)
     monkeypatch.setattr("time.sleep", lambda s: None)  # the per-minute pacing is real in production; here nobody waits
-    assert main([str(run), "--sample", str(sample_file), "--ledger", str(tmp_path / "l.json")]) == 0
+    assert main([str(run), "--sample", str(sample_file), "--ledger", str(tmp_path / "l.json"), "--no-cost-guard"]) == 0
     got = {i for i, v in verdicts(judged_path(run)).items() if v}
     replacement = manifest["strata"]["regular_with_tools"]["reserve_in_order"][0]
     assert len(got) == 15 == len(judge.calls) and gone not in got and replacement in got

@@ -147,3 +147,19 @@ def _isolated_traces(tmp_path, monkeypatch):
     yield
     get_settings.cache_clear()
     get_cache.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _cost_guard_never_reaches_the_network_or_the_real_ledger(tmp_path, monkeypatch):
+    """The cost guard (eval/cost_guard.py) reads the REAL key's counter and the public price listing, and writes eval/reports/cost_ledger.json. A test that runs `run_eval` or
+    `rejudge` without `--no-cost-guard` did exactly that once (it wrote two entries into the real ledger and slowed the suite): now it fails loudly instead. The tests of the guard
+    itself inject their own reader, fetcher and paths."""
+    from eval import cost_guard
+
+    def refuse(*_a, **_k):
+        raise AssertionError("a test reached the OpenRouter key counter or price listing: pass --no-cost-guard, or inject read_key / fetch")
+
+    monkeypatch.setattr(cost_guard, "read_key_usage", refuse)
+    monkeypatch.setattr(cost_guard, "fetch_endpoints", refuse)
+    monkeypatch.setattr(cost_guard, "LEDGER_JSON", tmp_path / "cost_ledger.json")
+    monkeypatch.setattr(cost_guard, "LEDGER_MD", tmp_path / "COST_LEDGER.md")
