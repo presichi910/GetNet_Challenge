@@ -1,11 +1,14 @@
-# One model per role. Values come from the shell or .env; these defaults are the configuration the evaluation reports
-# were produced with (agents on Fireworks gpt-oss-120b, judge on Groq qwen).
-# Override for a single run: LIGHT_MODEL=accounts/fireworks/models/gpt-oss-20b docker compose run --rm eval
+# One model per role. Values come from the shell or .env; these defaults are the configuration that is evaluated
+# (agents and judge on OpenRouter, each model pinned to one host; the 2026-11-15 reports were made on Fireworks + Groq).
+# Override for a single run: KNOWLEDGE_MODEL=anthropic/claude-haiku-5.5 docker compose run --rm eval
 x-models: &models
-  AGENT_PROVIDER: ${AGENT_PROVIDER:-fireworks}      # fireworks or groq (agents only; the judge is always Groq)
-  LLM_MODEL: ${LLM_MODEL:-accounts/fireworks/models/gpt-oss-120b}      # knowledge agent
-  LIGHT_MODEL: ${LIGHT_MODEL:-accounts/fireworks/models/gpt-oss-120b}  # router, synthesizer, verifier (and support if SUPPORT_MODEL is empty)
-  SUPPORT_MODEL: ${SUPPORT_MODEL:-accounts/fireworks/models/gpt-oss-120b}  # support agent
+  AGENT_PROVIDER: ${AGENT_PROVIDER:-openrouter}      # openrouter, groq or fireworks (agents only)
+  JUDGE_PROVIDER: ${JUDGE_PROVIDER:-openrouter}      # openrouter or groq (the eval judge)
+  LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-120b}      # knowledge agent
+  LIGHT_MODEL: ${LIGHT_MODEL:-openai/gpt-oss-120b}  # router, synthesizer, verifier (and support if SUPPORT_MODEL is empty)
+  SUPPORT_MODEL: ${SUPPORT_MODEL:-openai/gpt-oss-120b}  # support agent
+  KNOWLEDGE_MODEL: ${KNOWLEDGE_MODEL:-}   # empty = LLM_MODEL (the model comparison sets it)
+  SYNTH_MODEL: ${SYNTH_MODEL:-}           # empty = LIGHT_MODEL
   JUDGE_MODEL: ${JUDGE_MODEL:-qwen/qwen3.8-27b}     # eval judge (different family than the agents)
   REASONING_EFFORT: ${REASONING_EFFORT:-low}
 
@@ -55,7 +58,7 @@ services:
     environment:
       <<: [*models, *auth]
       WEB_CONCURRENCY: "1"   # one worker only (rate limit and key cache in the process, conversations in one SQLite file)
-      # if Fireworks has an outage (5xx, 429, timeout) the same model on Groq answers instead (needs GROQ_API_KEY); "" = no failover
+      # if the primary provider has an outage (5xx, 429, timeout) the same model on Groq answers instead (needs GROQ_API_KEY); "" = no failover
       FALLBACK_PROVIDER: ${FALLBACK_PROVIDER-groq}
     depends_on:
       keycloak:

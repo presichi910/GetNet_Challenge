@@ -15,7 +15,8 @@ def make_knowledge_node(llm=None):
         prompt = KNOWLEDGE_PROMPT.format(language=state.get("language", "English"),
                                          prior_context=format_prior_context(outputs))
         history = recent_dialogue(state["messages"], get_settings().history_window, state.get("summary", ""))
-        result = run_tool_agent("knowledge", llm or get_llm(), [search_getnet_kb, web_search, escalate_to_human], prompt, history,
+        result = run_tool_agent("knowledge", llm or get_llm(model=get_settings().effective_knowledge_model),
+                                [search_getnet_kb, web_search, escalate_to_human], prompt, history,
                                require_tool=True)
         return {"agent_outputs": {**outputs, "knowledge": result}, "step": state.get("step", 0) + 1}
 

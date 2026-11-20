@@ -1,4 +1,4 @@
-"""AGENT_PROVIDER picks the agents' client; the judge always stays on Groq. No network."""
+"""AGENT_PROVIDER picks the agents' client; JUDGE_PROVIDER picks the judge's, whatever the agents run on. No network."""
 import pytest
 from langchain_core.messages import HumanMessage
 from langchain_groq import ChatGroq
@@ -28,8 +28,8 @@ def provider(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_the_code_default_provider_is_groq():
-    assert Settings(_env_file=None).agent_provider == "groq"
+def test_the_code_default_provider_is_openrouter():
+    assert Settings(_env_file=None).agent_provider == "openrouter"
 
 
 def test_groq_provider_gives_chatgroq_with_reasoning_effort(provider):
@@ -69,18 +69,18 @@ def test_provider_name_is_case_insensitive_and_unknown_is_an_error(provider):
         get_llm(model=FW_120)
 
 
-@pytest.mark.parametrize("name", ["groq", "fireworks", None])
-def test_the_judge_is_always_groq(provider, name):
-    provider(name, JUDGE_MODEL="qwen/qwen3.8-27b")
+@pytest.mark.parametrize("name", ["groq", "fireworks", "openrouter", None])
+def test_the_judge_on_groq_does_not_depend_on_the_agent_provider(provider, name):
+    provider(name, JUDGE_PROVIDER="groq", JUDGE_MODEL="qwen/qwen3.8-27b")
     judge = get_judge_llm()
     assert isinstance(judge, ChatGroq)
     assert judge.model_name == "qwen/qwen3.8-27b" and judge.max_tokens == 500
 
 
-def test_the_eval_judge_class_uses_the_groq_judge(provider):
+def test_the_eval_judge_class_follows_judge_provider(provider):
     from eval.judge import Judge
 
-    provider("fireworks", JUDGE_MODEL="qwen/qwen3.8-27b")
+    provider("fireworks", JUDGE_PROVIDER="groq", JUDGE_MODEL="qwen/qwen3.8-27b")
     assert isinstance(Judge().llm, ChatGroq)
 
 

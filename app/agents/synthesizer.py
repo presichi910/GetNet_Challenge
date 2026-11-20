@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 def make_synthesizer_node(llm=None):
     def synthesizer_node(state: dict) -> dict:
-        model = llm or get_llm(temperature=0.2, model=get_settings().light_model)
+        model = llm or get_llm(temperature=0.2, model=get_settings().effective_synth_model)
         language = state.get("language", "English")
         outputs = state.get("agent_outputs", {})
         ok = {k: v for k, v in outputs.items() if v.get("answer") and not v.get("error")}

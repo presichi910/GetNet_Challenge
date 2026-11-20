@@ -90,9 +90,9 @@ def test_the_eval_report_lists_the_support_model_apart(models):
 
     models(SUPPORT_MODEL="m-support")
     got = current_models()
-    assert got.pop("agent provider") in ("groq", "fireworks")
+    assert got.pop("agent provider") in ("openrouter", "groq", "fireworks")
     assert got == {"knowledge": "m-knowledge", "router / synthesizer": "m-light",
-                   "support": "m-support", "judge": "m-judge (groq)"}
+                   "support": "m-support", "judge": "m-judge (openrouter)"}
 
 
 # ---- the files that configure the containers must not drift from the settings ----
@@ -108,17 +108,18 @@ def test_every_model_variable_is_in_docker_compose_and_env_example():
         assert re.search(rf"^{var}=", example, re.M), f"{var} missing in .env.example"
 
 
-def test_env_example_delivers_support_on_the_bigger_model_and_the_code_default_stays_the_light_model():
+def test_env_example_delivers_every_role_on_gpt_oss_120b_and_the_code_default_stays_the_light_model():
     example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    # the example (and the compose defaults) are the evaluated configuration: every role on Fireworks gpt-oss-120b
-    assert re.search(r"^SUPPORT_MODEL=accounts/fireworks/models/gpt-oss-120b\s*$", example, re.M)
-    assert re.search(r"^AGENT_PROVIDER=fireworks\s*$", example, re.M)
+    # the example and the compose defaults are the configuration that is evaluated: every role on OpenRouter gpt-oss-120b
+    assert re.search(r"^SUPPORT_MODEL=openai/gpt-oss-120b\s*$", example, re.M)
+    assert re.search(r"^AGENT_PROVIDER=openrouter\s*$", example, re.M)
     assert Settings(_env_file=None).support_model == ""  # without the variable, Support = LIGHT_MODEL
 
 
-def test_compose_defaults_are_the_configuration_the_reports_were_run_with():
+def test_compose_defaults_are_the_configuration_that_is_evaluated():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     for var in ("LLM_MODEL", "LIGHT_MODEL", "SUPPORT_MODEL"):
-        assert f"{var}: ${{{var}:-accounts/fireworks/models/gpt-oss-120b}}" in compose, var
-    assert "AGENT_PROVIDER: ${AGENT_PROVIDER:-fireworks}" in compose
-    assert "JUDGE_MODEL: ${JUDGE_MODEL:-qwen/qwen3.8-27b}" in compose  # the judge stays another family, on Groq
+        assert f"{var}: ${{{var}:-openai/gpt-oss-120b}}" in compose, var
+    assert "AGENT_PROVIDER: ${AGENT_PROVIDER:-openrouter}" in compose
+    assert "JUDGE_PROVIDER: ${JUDGE_PROVIDER:-openrouter}" in compose
+    assert "JUDGE_MODEL: ${JUDGE_MODEL:-qwen/qwen3.8-27b}" in compose  # the judge stays another family

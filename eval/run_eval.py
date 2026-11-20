@@ -426,8 +426,12 @@ def current_models() -> dict:
     from app.config import get_settings
 
     s = get_settings()
-    return {"agent provider": s.agent_provider, "knowledge": s.llm_model, "router / synthesizer": s.light_model,
-            "support": s.effective_support_model, "judge": f"{s.judge_model} (groq)"}
+    synth = s.effective_synth_model
+    judge_host = ", ".join(s.openrouter_provider_order.get(s.judge_model, [])) if s.judge_provider.lower() == "openrouter" else ""
+    return {"agent provider": s.agent_provider, "knowledge": s.effective_knowledge_model,
+            "router / synthesizer": s.light_model if synth == s.light_model else f"{s.light_model} / {synth}",
+            "support": s.effective_support_model,
+            "judge": f"{s.judge_model} ({s.judge_provider}{', ' + judge_host if judge_host else ''})"}
 
 
 def render_report(rows: list[dict], summary: dict, stamp: str, models: dict | None = None) -> str:

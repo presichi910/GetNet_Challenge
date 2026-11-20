@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     fireworks_api_key: str = ""
     tavily_api_key: str = ""
     voyage_api_key: str = ""
+    openrouter_api_key: str = ""
 
     # auth: RS256 tokens checked against the identity provider's public keys (JWKS). There is no shared secret in
     # the app. Merchants and operators are separate: each has its own issuer, audience and keys (in Keycloak, two
@@ -37,17 +38,27 @@ class Settings(BaseSettings):
     operator_rate_limit_per_minute: int = 120
 
     # models
-    # provider of the agents: groq (default) or fireworks (OpenAI-compatible API). The judge is always Groq.
-    agent_provider: str = "groq"
+    # provider of the agents: openrouter (default), groq or fireworks (the last two were the providers of the 2026-11-15 reports)
+    agent_provider: str = "openrouter"
+    # provider of the eval judge: openrouter (default) or groq. The judge's model family is never the agents' (app/llm.py)
+    judge_provider: str = "openrouter"
     # the other provider that answers when AGENT_PROVIDER has an outage (5xx, 429, no connection, timeout); empty = no
     # failover. The same model under the other provider's id (app/llm.py::fallback_model_name). Needs its API key
     fallback_provider: str = ""
+    # OpenRouter. Every model is pinned to ONE upstream host (a measurement must not move between hosts or between quantizations):
+    # JSON {model id: [provider slugs]}, sent as `provider.order`. A model not listed is not pinned (and a warning says so).
+    # `allow_fallbacks` false = a host that fails is an error, never another host. Setting this variable replaces the whole map.
+    openrouter_provider_order: dict[str, list[str]] = {"openai/gpt-oss-120b": ["deepinfra/bf16"], "qwen/qwen3.8-27b": ["alibaba"]}
+    openrouter_allow_fallbacks: bool = False
     llm_model: str = "openai/gpt-oss-120b"
-    # smaller model for router and synthesizer (Groq limits are per model)
-    light_model: str = "openai/gpt-oss-20b"
+    # router, synthesizer (unless SYNTH_MODEL is set), verifier, observe and summarizer
+    light_model: str = "openai/gpt-oss-120b"
     # support agent. Empty = the same model as LIGHT_MODEL. A bigger model follows the "always call
     # get_recent_transactions on a decline" rule much better, at the cost of its quota.
     support_model: str = ""
+    # the generation roles that the model comparison (plan 9.6, C1) changes. Empty = LLM_MODEL (knowledge) and LIGHT_MODEL (synthesizer)
+    knowledge_model: str = ""
+    synth_model: str = ""
     judge_model: str = "qwen/qwen3.8-27b"
     reasoning_effort: str = "low"  # gpt-oss only, keeps it fast
     embedding_model: str = "voyage-3.5"
@@ -156,6 +167,14 @@ class Settings(BaseSettings):
     @property
     def effective_support_model(self) -> str:
         return self.support_model or self.light_model
+
+    @property
+    def effective_knowledge_model(self) -> str:
+        return self.knowledge_model or self.llm_model
+
+    @property
+    def effective_synth_model(self) -> str:
+        return self.synth_model or self.light_model
 
 
 @lru_cache
