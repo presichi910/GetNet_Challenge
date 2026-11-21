@@ -16,6 +16,8 @@ _Written by `eval/cost_guard.py` after every guarded run, and by `python -m eval
 | 1 | 2026-11-20 04:43:59 | M1 (before the guard) | `-` | - | US$0.0420 | - | - | - | yes | - |
 | 2 | 2026-11-20 04:45:35 | cost guard smoke | `python -m eval.run_eval --regular-only --no-judge --only m01 --label c` | US$0.0011 | US$0.0002 | 0.17 | US$0.0002 | 1.00 | yes | - |
 | 3 | 2026-11-20 04:47:16 | ledger housekeeping | `-` | - | US$0.0000 | - | - | - | yes | - |
+| 4 | 2026-11-21 00:24:38 | rejudge | `python -m eval.rejudge eval/reports/C2-sample.json --sample eval/calib` | US$0.0160 | US$0.0165 | 1.03 | - | - | yes | - |
+| 5 | 2026-11-21 00:36:42 | rejudge | `python -m eval.rejudge eval/reports/C2-full.json` | US$0.0428 | US$0.0386 | 0.90 | - | - | yes | - |
 
 ### Notes
 
@@ -29,9 +31,10 @@ _Written by `eval/cost_guard.py` after every guarded run, and by `python -m eval
 | M1 (before the guard) | US$0.0420 |
 | cost guard smoke | US$0.0002 |
 | ledger housekeeping | US$0.0000 |
-| **total of the entries** | **US$0.0422** |
+| rejudge | US$0.0551 |
+| **total of the entries** | **US$0.0973** |
 
 ## Calibration of the factor
 
-- Runs with an estimate and a settled real cost: 1. real / estimate: median 0.17, largest 0.17, smallest 0.17.
+- Runs with an estimate and a settled real cost: 3. real / estimate: median 0.90, largest 1.03, smallest 0.17.
 - The factor in use is 1.5: every run stayed under it.

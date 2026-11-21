@@ -40,5 +40,37 @@
     "assumed_roles": [],
     "text": "Two entries (block rejudge, at 04:39 and 04:43 UTC on 2026-11-20) were written by a test that ran rejudge without --no-cost-guard, so it read the real key and wrote the real ledger: they spent nothing and were removed. tests/conftest.py now makes any test that reaches the key counter, the price listing or the real ledger fail loudly.",
     "n": 3
+  },
+  {
+    "at_utc": "2026-11-21 00:24:38",
+    "block": "rejudge",
+    "command": "python -m eval.rejudge eval/reports/C2-sample.json --sample eval/calibration/sample_v3.json",
+    "outcome": "completed",
+    "n_case_runs": 15,
+    "estimate_usd": 0.016040652925531914,
+    "safety": 1.5,
+    "spent_before_usd": 0.042215849,
+    "counter_after_usd": 0.058714774,
+    "real_usd": 0.016498924999999998,
+    "settled": true,
+    "reported_cost_usd": null,
+    "assumed_roles": [],
+    "n": 4
+  },
+  {
+    "at_utc": "2026-11-21 00:36:42",
+    "block": "rejudge",
+    "command": "python -m eval.rejudge eval/reports/C2-full.json",
+    "outcome": "completed",
+    "n_case_runs": 40,
+    "estimate_usd": 0.0427750744680851,
+    "safety": 1.5,
+    "spent_before_usd": 0.058714774,
+    "counter_after_usd": 0.097333674,
+    "real_usd": 0.0386189,
+    "settled": true,
+    "reported_cost_usd": null,
+    "assumed_roles": [],
+    "n": 5
   }
 ]
