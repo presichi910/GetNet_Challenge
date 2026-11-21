@@ -139,3 +139,13 @@ The owner confirmed the reading of amendment 1b written above, and this note fix
 - **Implemented as `--incumbent`** of `eval/host_latency.py`: the incumbent defaults to the host pinned in the settings (`OPENROUTER_PROVIDER_ORDER`, today `groq`); `--incumbent none` gives the unconditional winner of the
   19th. The report states whether the incumbent passes and what the unconditional winner would have been.
 
+
+## Enmienda 2 (20-nov): C2 did not meet its acceptance; the judge is declared new
+
+C2 (`eval/calibration/JUDGE_EQUIV.md`) did not meet its rule: on the 15 rows of `sample_v3` the verdict agreement with Groq is 86.7 % (the 40 rows of repetition 1: 95 %), and there is one new false pass against the human (`q02_weather`).
+No alternative host is tried: only fp8 hosts remain, and the author's unquantized host did not reproduce Groq. **This is a deviation from the plan and it is declared.**
+
+- The judge is a **new judge**: Qwen3.8 27B on Alibaba, reasoning effort none. Its prompt and parser stay frozen.
+- **C4/C5 (V4) is the only valid calibration.** V1-V3 describe the Groq judge.
+- Every before/after comparison uses this judge; the baseline is `eval/reports/C2-full.judged.json` (repetition 1, re-judged).
+- `q02_weather` and `m04_followup_product` (the two verdict disagreements with Groq) are reported with a note.

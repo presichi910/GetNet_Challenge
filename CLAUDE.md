@@ -60,6 +60,8 @@ El modelo ligero devuelve `Verification(statements=[Statement(statement, evidenc
 8. Dependencias aprobadas: `cryptography`, `rank_bm25`, `prometheus-client`, `opentelemetry-sdk==1.45.2` y `opentelemetry-exporter-otlp-proto-grpc==1.45.2` (aprobadas el 2026-11-16; ya venían de `chromadb`); solo dev: `ruff`, `mypy`, `bandit`, `pip-audit`, `pyyaml`. Cualquier otra: avisar antes.
 9. Reglas de trabajo: una fase a la vez, mínimo diff, sin refactors fuera de la fila de la rúbrica. Al cerrar cada fase: tabla ítem de rúbrica -> archivo/test/comando -> resultado REAL; autoevaluación honesta (nota y qué la separa del 9.5); archivos cambiados; actualizar "Pendiente". No marcar nada como hecho sin ejecutarlo; si no se puede ejecutar (Docker, red), dar el comando exacto de Windows `cmd` con la salida esperada. Timebox: si una fase pasa de 1.5x su estimación, parar y reportar. El eval real gasta API: usar `--only` y reportar el costo.
 
+**Juez nuevo (2026-11-20, C2 no cumplió; `eval/calibration/JUDGE_EQUIV.md`, Enmienda 2 del prerregistro):** el juez OpenRouter (Qwen3.8 27B, Alibaba, esfuerzo none) coincide con Groq en 95 % de las 40 filas pero 86.7 % en las 15 de `sample_v3`, con un falso pass nuevo (`q02`). No se prueban otros hosts (desviación declarada). Se declara juez NUEVO: V1-V3 describen al juez de Groq y **C4/C5 (V4) es la única calibración válida**. Línea base de todo antes/después: `eval/reports/C2-full.judged.json`. `q02` y `m04` se reportan con nota.
+
 ## Calibración del juez (resultados, en `eval/calibration/`)
 | | acuerdo | kappa | MAE groundedness | FP (juez pass, humano fail) | FN |
 |---|---|---|---|---|---|
